@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: platform-postgres-backups
+  namespace: data-system
+  labels:
+    app.kubernetes.io/name: platform-postgres
+    app.kubernetes.io/part-of: data-platform
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: standard

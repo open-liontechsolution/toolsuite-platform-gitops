@@ -1,0 +1,56 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: platform-postgres-logical-backup
+  namespace: data-system
+  labels:
+    app.kubernetes.io/name: platform-postgres
+    app.kubernetes.io/part-of: data-platform
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: platform-postgres
+            app.kubernetes.io/component: backup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: pg-dump
+              image: postgres:16.4
+              command:
+                - /bin/sh
+                - -c
+              args:
+                - |
+                  set -euo pipefail
+                  mkdir -p /backups
+                  ts=$(date +%Y%m%d%H%M%S)
+                  pg_dumpall --no-role-passwords --file=/backups/cluster-${ts}.sql
+              env:
+                - name: PGHOST
+                  value: platform-postgres-rw
+                - name: PGPORT
+                  value: "5432"
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: platform-postgres-superuser
+                      key: username
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: platform-postgres-superuser
+                      key: password
+              volumeMounts:
+                - name: backup
+                  mountPath: /backups
+          volumes:
+            - name: backup
+              persistentVolumeClaim:
+                claimName: platform-postgres-backups
