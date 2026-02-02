@@ -17,17 +17,17 @@ This repo prioritizes:
 
 ## Core stack
 
-- GitOps: :contentReference[oaicite:0]{index=0}
-- CI: :contentReference[oaicite:1]{index=1}
-- Distributed block storage: :contentReference[oaicite:2]{index=2}
-- HA PostgreSQL in Kubernetes: :contentReference[oaicite:3]{index=3}
-- SSO / IAM: :contentReference[oaicite:4]{index=4}
-- Secrets for public repos: :contentReference[oaicite:5]{index=5}
-- Networking/CNI: :contentReference[oaicite:6]{index=6}
+- GitOps: **Argo CD**
+- CI: **GitHub Actions** (or Argo Workflows)
+- Distributed block storage: **Longhorn**
+- HA PostgreSQL in Kubernetes: **CloudNativePG (CNPG)**
+- SSO / IAM: **Keycloak**
+- Secrets for public repos: **Sealed Secrets**
+- Networking/CNI: **Flannel** (k3s default) or Cilium
 
 Typical lab infrastructure:
-- Local Kubernetes via :contentReference[oaicite:7]{index=7}
-- Workers on :contentReference[oaicite:8]{index=8} VMs
+- Local Kubernetes via **k3s**
+- Workers on **Proxmox** VMs (or other hypervisor)
 - arm64 nodes (Raspberry Pi 4/5) + amd64 nodes (VMs/hosts)
 
 ---
@@ -41,20 +41,30 @@ Typical lab infrastructure:
 
 ---
 
-## Repository layout (proposed)
+## Repository layout
+
+### Currently Implemented
+
+```text
+.
+├─ apps/
+│  └─ data/                  # Data layer components
+│     └─ cnpg/               # CloudNativePG operator and PostgreSQL cluster
+└─ clusters/
+   ├─ local/                 # k3s/local overlay (Longhorn, low resources)
+   └─ cloud/                 # Cloud overlay (scaffold with examples)
+```
+
+### Planned
 
 ```text
 .
 ├─ bootstrap/
-│  └─ argocd/                # minimal Argo CD install to start GitOps
+│  └─ argocd/                # Minimal Argo CD install to start GitOps
 ├─ apps/
-│  ├─ platform/              # argo, sealed-secrets, etc.
-│  ├─ data/                  # longhorn, cnpg, backups
-│  ├─ security/              # keycloak and security components
-│  └─ observability/         # (future) metrics/logs/tracing
-├─ clusters/
-│  ├─ local/                 # k3s/local overlay (storageClass, node selectors, low resources)
-│  └─ cloud/                 # cloud overlay (cloud storageClass, resources, etc.)
+│  ├─ platform/              # Argo, sealed-secrets, etc.
+│  ├─ security/              # Keycloak and security components
+│  └─ observability/         # Metrics/logs/tracing
 └─ docs/
    ├─ quickstart.md
    ├─ operations.md

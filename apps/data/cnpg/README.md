@@ -20,6 +20,8 @@ Point an Argo CD Application at one of the environment overlays (recommended), e
 
 Example (app-of-apps later):
 
+> **Note:** Replace `<org>` with your GitHub organization or username in the `repoURL` below.
+
 ```yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -45,12 +47,14 @@ spec:
 After Argo CD sync (or `kustomize build clusters/local | kubectl apply -f -`):
 
 ```bash
-kubectl get pods -n cnpg-system
-kubectl get pods -n data-system
+kubectl get pods -n cnpg-system  # CNPG operator (created by remote manifest)
+kubectl get pods -n data-system  # PostgreSQL cluster instances
 kubectl get cluster -n data-system
 kubectl get services -n data-system | grep platform-postgres
 kubectl get cronjob -n data-system
 ```
+
+> **Note:** The `cnpg-system` namespace is automatically created by the CNPG operator manifest from the upstream release. The `data-system` namespace is explicitly defined in `namespaces.yaml`.
 
 CNPG automatically creates services:
 
@@ -83,7 +87,7 @@ A logical backup CronJob runs nightly and stores dumps in the PVC `platform-post
 
 1. Identify the backup file in the PVC:
    ```bash
-   kubectl exec -n data-system deploy/platform-postgres-1 -- ls -lh /backups
+   kubectl exec -n data-system platform-postgres-1 -- ls -lh /backups
    ```
 2. Copy the file locally (optional):
    ```bash
