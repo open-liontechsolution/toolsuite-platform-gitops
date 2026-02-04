@@ -39,6 +39,15 @@ patches:
           limits:
             cpu: "1"
             memory: "2Gi"
+      - op: add
+        path: /spec/podTemplate/spec/affinity/nodeAffinity/requiredDuringSchedulingIgnoredDuringExecution
+        value:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: node.kubernetes.io/performance
+                  operator: In
+                  values:
+                    - high
   
   # Backup PVC with Longhorn
   - target:
