@@ -7,7 +7,7 @@ namespace: data-dev
 resources:
   - ../../../apps/data/cnpg
   # Add your sealed secret here after creating it
-  # - sealedsecret-app.yaml
+  - sealedsecret-app.yaml
 
 patches:
   # Rename the Namespace resource to match this environment
