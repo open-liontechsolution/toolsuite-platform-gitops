@@ -4,12 +4,27 @@ This directory provides the **base** manifests for installing the CNPG operator 
 
 ## What this base includes
 
-- CNPG operator installation (remote manifest pinned to `v1.22.0`).
-- A 3-instance Postgres cluster (`platform-postgres`) in the `data-system` namespace.
+- A 3-instance Postgres cluster (`platform-postgres`) base configuration.
 - Anti-affinity to spread replicas across nodes.
 - Node **preference** for `workload=db` nodes using node affinity.
 - Logical backup CronJob writing to a PVC.
 - SealedSecret placeholder for application credentials (`platform-postgres-app`).
+
+**Note:** The CNPG operator is deployed separately in `apps/platform/cnpg-operator/` and must be installed first.
+
+## Prerequisites
+
+Before deploying any PostgreSQL cluster, ensure the CNPG operator is installed:
+
+```bash
+# Deploy operator (once per cluster)
+kustomize build apps/platform/cnpg-operator | kubectl apply -f -
+
+# Verify operator is running
+kubectl get pods -n cnpg-system
+```
+
+Or create an Argo CD Application for the operator (see `apps/platform/cnpg-operator/README.md`).
 
 ## Argo CD usage
 

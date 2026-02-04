@@ -48,8 +48,10 @@ Typical lab infrastructure:
 ```text
 .
 ├─ apps/
+│  ├─ platform/              # Platform infrastructure (deploy once per cluster)
+│  │  └─ cnpg-operator/      # CloudNativePG operator
 │  └─ data/                  # Data layer components
-│     └─ cnpg/               # CloudNativePG operator and PostgreSQL cluster
+│     └─ cnpg/               # PostgreSQL cluster resources
 └─ clusters/
    ├─ local/                 # Local k3s deployments (Longhorn storage)
    │  ├─ dev/                # Development environment (1 instance, minimal resources)
@@ -110,3 +112,48 @@ Each environment must have its own sealed secret:
 5. Delete the plain secret file
 
 See individual environment READMEs for detailed instructions
+
+## Deployment Order
+
+### 1. Deploy Platform Infrastructure (Once per Cluster)
+
+```bash
+# Deploy CNPG operator
+kustomize build apps/platform/cnpg-operator | kubectl apply -f -
+
+# Verify operator is running
+kubectl get pods -n cnpg-system
+```
+
+### 2. Deploy Application Environments
+
+```bash
+# Deploy your chosen environment
+kustomize build clusters/local/dev | kubectl apply -f -
+
+# Or use Argo CD (recommended)
+```
+
+**Important:** The CNPG operator must be deployed before any PostgreSQL clusters.
+
+### Changing Namespace
+
+To deploy to a different namespace, simply change one line in the environment's `kustomization.yaml`:
+
+```yaml
+# Change this single line to deploy to a different namespace
+namespace: data-test  # Changed from data-dev
+```
+
+Then update the Namespace resource patch to match:
+
+```yaml
+patches:
+  - target:
+      kind: Namespace
+      name: data-system
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: data-test  # Changed from data-dev
+```
