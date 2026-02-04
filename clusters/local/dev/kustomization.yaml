@@ -10,6 +10,13 @@ resources:
   - sealedsecret-app.yaml
 
 patches:
+  # Remove CNPG operator namespace to avoid conflicts after namespace transform
+  - target:
+      kind: Namespace
+      name: cnpg-system
+    patch: |-
+      $patch: delete
+
   # Rename the Namespace resource to match this environment
   - target:
       kind: Namespace
@@ -52,6 +59,6 @@ patches:
         path: /spec/resources/requests/storage
         value: 20Gi
 
-commonLabels:
+labels:
   environment: dev
   deployment: local
