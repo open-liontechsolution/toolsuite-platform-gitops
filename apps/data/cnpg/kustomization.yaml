@@ -5,5 +5,9 @@ resources:
   - cluster.yaml
   - backup-pvc.yaml
   - backup-cronjob.yaml
-  - sealedsecret-app.yaml
   - https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.22/releases/cnpg-1.22.0.yaml
+
+# Note: Secrets are not included by default
+# Create your own secret or sealedsecret based on the examples:
+# - secret-app.example.yaml (plain secret to encrypt)
+# - sealedsecret-app.example.yaml (encrypted secret template)

@@ -2,7 +2,6 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: platform-postgres-logical-backup
-  namespace: data-system
   labels:
     app.kubernetes.io/name: platform-postgres
     app.kubernetes.io/part-of: data-platform
@@ -30,8 +29,19 @@ spec:
                 - |
                   set -euo pipefail
                   mkdir -p /backups
+                  
+                  # Clean up backups older than 30 days
+                  echo "Cleaning up old backups..."
+                  find /backups -name "cluster-*.sql" -type f -mtime +30 -delete || true
+                  
+                  # Create new backup
                   ts=$(date +%Y%m%d%H%M%S)
+                  echo "Creating backup: cluster-${ts}.sql"
                   pg_dumpall --no-role-passwords --file=/backups/cluster-${ts}.sql
+                  
+                  # Show backup size and disk usage
+                  ls -lh /backups/cluster-${ts}.sql
+                  df -h /backups
               env:
                 - name: PGHOST
                   value: platform-postgres-rw
@@ -47,6 +57,13 @@ spec:
                     secretKeyRef:
                       name: platform-postgres-superuser
                       key: password
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "256Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "1Gi"
               volumeMounts:
                 - name: backup
                   mountPath: /backups
