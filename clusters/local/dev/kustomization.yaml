@@ -60,5 +60,6 @@ patches:
         value: 20Gi
 
 labels:
-  environment: dev
-  deployment: local
+  - pairs:
+      environment: dev
+      deployment: local
