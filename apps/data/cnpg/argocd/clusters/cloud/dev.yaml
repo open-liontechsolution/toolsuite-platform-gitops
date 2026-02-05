@@ -41,5 +41,5 @@ spec:
     - group: postgresql.cnpg.io
       kind: Cluster
       jsonPointers:
-        - /spec/instances
+      #  - /spec/instances
         - /status
