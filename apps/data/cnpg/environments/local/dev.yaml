@@ -7,68 +7,69 @@ mode: standalone
 
 # Values for the CloudNativePG cluster subchart (aliased as 'cnpg')
 cnpg:
-  # Cluster name
-  name: platform-postgres-dev
+  cluster:
+    # Cluster name
+    name: platform-postgres-dev
 
-  # PostgreSQL image
-  imageName: ghcr.io/cloudnative-pg/postgresql:16.4
+    # PostgreSQL image
+    imageName: ghcr.io/cloudnative-pg/postgresql:16.4
 
-  # Single instance for development
-  instances: 1
-  
-  # Storage configuration for Longhorn
-  storage:
-    size: 20Gi
-    storageClass: longhorn
-  
-  # Minimal resources for development
-  resources:
-    requests:
-      cpu: "250m"
-      memory: "512Mi"
-    limits:
-      cpu: "1"
-      memory: "2Gi"
-  
-  # Node affinity for high-performance nodes
-  affinity:
-    enablePodAntiAffinity: true
-    topologyKey: kubernetes.io/hostname
-    podAntiAffinityType: preferred
-    nodeAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        nodeSelectorTerms:
-          - matchExpressions:
-              - key: node.kubernetes.io/performance
-                operator: In
-                values:
-                  - high
-  
-  # Environment labels
-  labels:
-    app.kubernetes.io/part-of: data-platform
-    environment: dev
-    deployment: local
-  
-  # Bootstrap configuration
-  bootstrap:
-    initdb:
-      database: platform
-      owner: platform
-      secret:
-        name: platform-postgres-app
-  
-  # Primary update strategy
-  primaryUpdateStrategy: unsupervised
-  
-  # PostgreSQL tuning for dev
-  postgresql:
-    parameters:
-      max_connections: "100"
-      shared_buffers: "128MB"
-      effective_cache_size: "512MB"
-      maintenance_work_mem: "32MB"
-      work_mem: "1310kB"
+    # Single instance for development
+    instances: 1
+    
+    # Storage configuration for Longhorn
+    storage:
+      size: 20Gi
+      storageClass: longhorn
+    
+    # Minimal resources for development
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+      limits:
+        cpu: "1"
+        memory: "2Gi"
+    
+    # Node affinity for high-performance nodes
+    affinity:
+      enablePodAntiAffinity: true
+      topologyKey: kubernetes.io/hostname
+      podAntiAffinityType: preferred
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: node.kubernetes.io/performance
+                  operator: In
+                  values:
+                    - high
+    
+    # Environment labels
+    labels:
+      app.kubernetes.io/part-of: data-platform
+      environment: dev
+      deployment: local
+    
+    # Bootstrap configuration
+    bootstrap:
+      initdb:
+        database: platform
+        owner: platform
+        secret:
+          name: platform-postgres-app
+    
+    # Primary update strategy
+    primaryUpdateStrategy: unsupervised
+    
+    # PostgreSQL tuning for dev
+    postgresql:
+      parameters:
+        max_connections: "100"
+        shared_buffers: "128MB"
+        effective_cache_size: "512MB"
+        maintenance_work_mem: "32MB"
+        work_mem: "1310kB"
 
 # SealedSecret configuration for local dev
 # IMPORTANT: Replace these placeholder values with actual encrypted secrets

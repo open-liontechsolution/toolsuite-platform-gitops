@@ -15,7 +15,7 @@ spec:
     helm:
       releaseName: platform-postgres-dev
       valueFiles:
-      #  - values.yaml
+        - values.yaml
         - environments/local/dev.yaml
   
   destination:

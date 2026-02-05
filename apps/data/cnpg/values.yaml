@@ -10,116 +10,117 @@ mode: standalone
 
 # Values for the CloudNativePG cluster subchart (aliased as 'cnpg')
 cnpg:
-  # Cluster name
-  name: platform-postgres
-  
-  # PostgreSQL version
-  imageName: ghcr.io/cloudnative-pg/postgresql:16.4
-  
-  # Number of instances (overridden per environment)
-  instances: 3
-  
-  # PostgreSQL configuration
-  postgresql:
-    parameters:
-      max_connections: "200"
-      shared_buffers: "256MB"
-      effective_cache_size: "1GB"
-      maintenance_work_mem: "64MB"
-      checkpoint_completion_target: "0.9"
-      wal_buffers: "16MB"
-      default_statistics_target: "100"
-      random_page_cost: "1.1"
-      effective_io_concurrency: "200"
-      work_mem: "2621kB"
-      min_wal_size: "1GB"
-      max_wal_size: "4GB"
-  
-  # Storage configuration (overridden per environment)
-  storage:
-    size: 20Gi
-    storageClass: standard
-  
-  # Bootstrap configuration
-  bootstrap:
-    initdb:
-      database: platform
-      owner: platform
-      secret:
-        name: platform-postgres-app
-  
-  # High availability configuration
-  primaryUpdateStrategy: unsupervised
-  
-  # Anti-affinity to spread replicas across nodes
-  affinity:
-    enablePodAntiAffinity: true
-    topologyKey: kubernetes.io/hostname
-    podAntiAffinityType: preferred
-  
-  # Node affinity - prefer nodes with workload=db label
-  nodeSelector: {}
-  
-  # Tolerations
-  tolerations: []
-  
-  # Resources (overridden per environment)
-  resources:
-    requests:
-      cpu: "1"
-      memory: "2Gi"
-    limits:
-      cpu: "4"
-      memory: "8Gi"
-  
-  # Monitoring
-  monitoring:
-    enabled: false
-    podMonitorEnabled: false
-    # Uncomment to enable monitoring:
-    # enabled: true
-    # podMonitorEnabled: true
-  
-  # Backup configuration
-  backup:
-    enabled: false
-    # Uncomment and configure for S3/Azure/GCS backups:
-    # enabled: true
-    # barmanObjectStore:
-    #   destinationPath: s3://my-bucket/backups
-    #   s3Credentials:
-    #     accessKeyId:
-    #       name: backup-credentials
-    #       key: ACCESS_KEY_ID
-    #     secretAccessKey:
-    #       name: backup-credentials
-    #       key: ACCESS_SECRET_KEY
-    #   wal:
-    #     compression: gzip
-    #     encryption: AES256
-    #   data:
-    #     compression: gzip
-    #     encryption: AES256
-    # retentionPolicy: "30d"
-  
-  # Scheduled backups
-  scheduledBackup:
-    enabled: false
-    # Uncomment to enable scheduled backups:
-    # enabled: true
-    # name: daily-backup
-    # schedule: "0 2 * * *"
-    # backupOwnerReference: self
-  
-  # Certificates
-  certificates: {}
-  
-  # Additional labels
-  labels:
-    app.kubernetes.io/part-of: data-platform
-  
-  # Additional annotations
-  annotations: {}
+  cluster:
+    # Cluster name
+    name: platform-postgres
+    
+    # PostgreSQL version
+    imageName: ghcr.io/cloudnative-pg/postgresql:16.4
+    
+    # Number of instances (overridden per environment)
+    instances: 3
+    
+    # PostgreSQL configuration
+    postgresql:
+      parameters:
+        max_connections: "200"
+        shared_buffers: "256MB"
+        effective_cache_size: "1GB"
+        maintenance_work_mem: "64MB"
+        checkpoint_completion_target: "0.9"
+        wal_buffers: "16MB"
+        default_statistics_target: "100"
+        random_page_cost: "1.1"
+        effective_io_concurrency: "200"
+        work_mem: "2621kB"
+        min_wal_size: "1GB"
+        max_wal_size: "4GB"
+    
+    # Storage configuration (overridden per environment)
+    storage:
+      size: 20Gi
+      storageClass: standard
+    
+    # Bootstrap configuration
+    bootstrap:
+      initdb:
+        database: platform
+        owner: platform
+        secret:
+          name: platform-postgres-app
+    
+    # High availability configuration
+    primaryUpdateStrategy: unsupervised
+    
+    # Anti-affinity to spread replicas across nodes
+    affinity:
+      enablePodAntiAffinity: true
+      topologyKey: kubernetes.io/hostname
+      podAntiAffinityType: preferred
+    
+    # Node affinity - prefer nodes with workload=db label
+    nodeSelector: {}
+    
+    # Tolerations
+    tolerations: []
+    
+    # Resources (overridden per environment)
+    resources:
+      requests:
+        cpu: "1"
+        memory: "2Gi"
+      limits:
+        cpu: "4"
+        memory: "8Gi"
+    
+    # Monitoring
+    monitoring:
+      enabled: false
+      podMonitorEnabled: false
+      # Uncomment to enable monitoring:
+      # enabled: true
+      # podMonitorEnabled: true
+    
+    # Backup configuration
+    backup:
+      enabled: false
+      # Uncomment and configure for S3/Azure/GCS backups:
+      # enabled: true
+      # barmanObjectStore:
+      #   destinationPath: s3://my-bucket/backups
+      #   s3Credentials:
+      #     accessKeyId:
+      #       name: backup-credentials
+      #       key: ACCESS_KEY_ID
+      #     secretAccessKey:
+      #       name: backup-credentials
+      #       key: ACCESS_SECRET_KEY
+      #   wal:
+      #     compression: gzip
+      #     encryption: AES256
+      #   data:
+      #     compression: gzip
+      #     encryption: AES256
+      # retentionPolicy: "30d"
+    
+    # Scheduled backups
+    scheduledBackup:
+      enabled: false
+      # Uncomment to enable scheduled backups:
+      # enabled: true
+      # name: daily-backup
+      # schedule: "0 2 * * *"
+      # backupOwnerReference: self
+    
+    # Certificates
+    certificates: {}
+    
+    # Additional labels
+    labels:
+      app.kubernetes.io/part-of: data-platform
+    
+    # Additional annotations
+    annotations: {}
 
 # SealedSecret configuration
 # This creates a SealedSecret that will be unsealed by the sealed-secrets controller

@@ -4,55 +4,56 @@
 
 # Values for the CloudNativePG cluster subchart (aliased as 'cnpg')
 cnpg:
-  # Three instances for full HA across zones
-  instances: 3
-  
-  # Storage configuration for cloud (AWS gp3 by default)
-  storage:
-    size: 200Gi
-    storageClass: gp3
-    # For GCP use: pd-ssd
-    # For Azure use: managed-premium
-  
-  # Cloud production resources
-  resources:
-    requests:
-      cpu: "2"
-      memory: "4Gi"
-    limits:
-      cpu: "8"
-      memory: "16Gi"
-  
-  # Anti-affinity for multi-AZ with required distribution
-  affinity:
-    enablePodAntiAffinity: true
-    topologyKey: topology.kubernetes.io/zone
-    podAntiAffinityType: required
-    nodeAffinity:
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          preference:
-            matchExpressions:
-              - key: workload
-                operator: In
-                values:
+  cluster:
+    # Three instances for full HA across zones
+    instances: 3
+    
+    # Storage configuration for cloud (AWS gp3 by default)
+    storage:
+      size: 200Gi
+      storageClass: gp3
+      # For GCP use: pd-ssd
+      # For Azure use: managed-premium
+    
+    # Cloud production resources
+    resources:
+      requests:
+        cpu: "2"
+        memory: "4Gi"
+      limits:
+        cpu: "8"
+        memory: "16Gi"
+    
+    # Anti-affinity for multi-AZ with required distribution
+    affinity:
+      enablePodAntiAffinity: true
+      topologyKey: topology.kubernetes.io/zone
+      podAntiAffinityType: required
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+                - key: workload
+                  operator: In
+                  values:
                   - database
-  
-  # Environment labels
-  labels:
-    app.kubernetes.io/part-of: data-platform
-    environment: prod
-    deployment: cloud
-  
-  # PostgreSQL tuning for cloud production
-  postgresql:
-    parameters:
-      max_connections: "300"
-      shared_buffers: "1GB"
-      effective_cache_size: "4GB"
-      maintenance_work_mem: "256MB"
-      work_mem: "3495kB"
-      max_wal_size: "8GB"
+    
+    # Environment labels
+    labels:
+      app.kubernetes.io/part-of: data-platform
+      environment: prod
+      deployment: cloud
+    
+    # PostgreSQL tuning for cloud production
+    postgresql:
+      parameters:
+        max_connections: "300"
+        shared_buffers: "1GB"
+        effective_cache_size: "4GB"
+        maintenance_work_mem: "256MB"
+        work_mem: "3495kB"
+        max_wal_size: "8GB"
   
   # SealedSecret configuration for cloud prod
   # IMPORTANT: Replace these placeholder values with actual encrypted secrets
