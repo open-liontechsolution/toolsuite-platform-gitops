@@ -4,73 +4,61 @@
 
 # Values for the CloudNativePG cluster subchart
 cluster:
-    # Three instances for full HA across zones
-    instances: 3
-    
-    # Storage configuration for cloud (AWS gp3 by default)
-    storage:
-      size: 200Gi
-      storageClass: gp3
-      # For GCP use: pd-ssd
-      # For Azure use: managed-premium
-    
-    # Cloud production resources
-    resources:
-      requests:
-        cpu: "2"
-        memory: "4Gi"
-      limits:
-        cpu: "8"
-        memory: "16Gi"
-    
-    # Anti-affinity for multi-AZ with required distribution
-    affinity:
-      enablePodAntiAffinity: true
-      topologyKey: topology.kubernetes.io/zone
-      podAntiAffinityType: required
-      nodeAffinity:
-        preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            preference:
-              matchExpressions:
-                - key: workload
-                  operator: In
-                  values:
-                  - database
-    
-    # Environment labels
-    labels:
-      app.kubernetes.io/part-of: data-platform
-      environment: prod
-      deployment: cloud
-    
-    # PostgreSQL tuning for cloud production
-    postgresql:
-      parameters:
-        max_connections: "300"
-        shared_buffers: "1GB"
-        effective_cache_size: "4GB"
-        maintenance_work_mem: "256MB"
-        work_mem: "3495kB"
-        checkpoint_completion_target: "0.9"
-        wal_buffers: "16MB"
-        default_statistics_target: "100"
-        random_page_cost: "1.1"
-        effective_io_concurrency: "200"
-        min_wal_size: "1GB"
-        max_wal_size: "8GB"
+  # Three instances for full HA across zones
+  instances: 3
   
-  # SealedSecret configuration for cloud prod
-  # IMPORTANT: Replace these placeholder values with actual encrypted secrets
-  # To encrypt a secret:
-  #   echo -n "your-value" | kubeseal --raw --from-file=/dev/stdin --namespace data-prod --name platform-postgres-app
-  sealedSecret:
-    enabled: true
-    name: platform-postgres-app
-    encryptedData:
-      # Replace with actual encrypted values using kubeseal
-      username: "REPLACE_WITH_ENCRYPTED_USERNAME"
-      password: "REPLACE_WITH_ENCRYPTED_PASSWORD"
+  # Storage configuration for cloud (AWS gp3 by default)
+  storage:
+    size: 200Gi
+    storageClass: gp3
+    # For GCP use: pd-ssd
+    # For Azure use: managed-premium
+  
+  # Cloud production resources
+  resources:
+    requests:
+      cpu: "2"
+      memory: "4Gi"
+    limits:
+      cpu: "8"
+      memory: "16Gi"
+  
+  # Anti-affinity for multi-AZ with required distribution
+  affinity:
+    enablePodAntiAffinity: true
+    topologyKey: topology.kubernetes.io/zone
+    podAntiAffinityType: required
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          preference:
+            matchExpressions:
+              - key: workload
+                operator: In
+                values:
+                - database
+  
+  # Environment labels
+  labels:
+    app.kubernetes.io/part-of: data-platform
+    environment: prod
+    deployment: cloud
+  
+  # PostgreSQL tuning for cloud production
+  postgresql:
+    parameters:
+      max_connections: "300"
+      shared_buffers: "1GB"
+      effective_cache_size: "4GB"
+      maintenance_work_mem: "256MB"
+      work_mem: "3495kB"
+      checkpoint_completion_target: "0.9"
+      wal_buffers: "16MB"
+      default_statistics_target: "100"
+      random_page_cost: "1.1"
+      effective_io_concurrency: "200"
+      min_wal_size: "1GB"
+      max_wal_size: "8GB"
   
   # Enable monitoring for production
   monitoring:
@@ -110,3 +98,15 @@ cluster:
     # name: daily-backup
     # schedule: "0 2 * * *"
     # backupOwnerReference: self
+
+# SealedSecret configuration for cloud prod
+# IMPORTANT: Replace these placeholder values with actual encrypted secrets
+# To encrypt a secret:
+#   echo -n "your-value" | kubeseal --raw --from-file=/dev/stdin --namespace data-prod --name platform-postgres-app
+sealedSecret:
+  enabled: true
+  name: platform-postgres-app
+  encryptedData:
+    # Replace with actual encrypted values using kubeseal
+    username: "REPLACE_WITH_ENCRYPTED_USERNAME"
+    password: "REPLACE_WITH_ENCRYPTED_PASSWORD"

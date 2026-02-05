@@ -2,13 +2,11 @@
 # Namespace: data-dev
 # Deployment: local k3s cluster with Longhorn storage
 
-# Chart mode
-mode: standalone
-
 # Values for the CloudNativePG cluster subchart
 cluster:
-    # Cluster name
-    name: platform-postgres-dev
+  fullnameOverride: platform-postgres-dev
+
+  cluster:
 
     # PostgreSQL image
     imageName: ghcr.io/cloudnative-pg/postgresql:16.4
@@ -20,6 +18,9 @@ cluster:
     storage:
       size: 20Gi
       storageClass: longhorn
+    walStorage:
+      storageClass: longhorn
+      size: 1Gi
     
     # Minimal resources for development
     resources:
