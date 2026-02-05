@@ -269,9 +269,9 @@ cluster:
 
 ## Backups
 
-### Logical Backups (Custom CronJob)
+### Logical Backups
 
-The previous Kustomize setup included a custom logical backup CronJob. For Helm deployments, you have two options:
+For logical backups, you have two options:
 
 #### Option 1: Use CNPG Native Backups (Recommended)
 
@@ -304,7 +304,7 @@ cluster:
 
 #### Option 2: Custom Backup CronJob
 
-The old backup CronJob and PVC are preserved in `kustomize-deprecated/` and can be deployed separately if needed.
+You can deploy a custom backup CronJob separately if needed for specific backup requirements.
 
 ### Restore from Backup
 
@@ -394,16 +394,11 @@ Verify storage class exists:
 kubectl get storageclass
 ```
 
-## Migration from Kustomize
+## Migration History
 
-The previous Kustomize configuration is preserved in `kustomize-deprecated/` for reference. Key differences:
+This chart uses Helm for deployment and configuration management. All settings are configured through values files in `environments/{local|cloud}/{env}.yaml`.
 
-- **Kustomize:** Used patches to customize base manifests
-- **Helm:** Uses values files for parameterization
-- **Configuration:** All settings are now in values-*.yaml files
-- **Deployment:** Helm manages the lifecycle instead of kubectl/kustomize
-
-See the main repository's `MIGRATION.md` for detailed migration instructions.
+For historical context on the migration to Helm, see `docs/migration/` in the repository root.
 
 ## References
 

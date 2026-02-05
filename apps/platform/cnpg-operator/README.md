@@ -151,11 +151,11 @@ helm uninstall cnpg-operator -n cnpg-system
 
 **Warning:** This will not delete existing PostgreSQL clusters, but they will no longer be managed.
 
-## Migration from Kustomize
+## Migration History
 
-If you were previously using Kustomize, the old configuration is preserved in `kustomize-deprecated/` for reference. The Helm chart provides the same functionality with better parameterization.
+This chart uses the official CloudNativePG operator Helm chart for deployment. All configuration is managed through the `values.yaml` file.
 
-See the main repository's `MIGRATION.md` for detailed migration instructions.
+For historical context on the migration to Helm, see `docs/migration/` in the repository root.
 
 ## Troubleshooting
 

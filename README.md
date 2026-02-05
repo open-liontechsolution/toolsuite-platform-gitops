@@ -55,7 +55,7 @@ Typical lab infrastructure:
 │  │     ├─ values.yaml      # Operator configuration
 │  │     ├─ argocd/          # Argo CD Application manifests
 │  │     │  └─ operator.yaml
-│  │     └─ kustomize-deprecated/  # Old Kustomize files (deprecated)
+│  │     └─ README.md
 │  └─ data/                  # Data layer components
 │     └─ cnpg/               # PostgreSQL cluster resources (Helm chart)
 │        ├─ Chart.yaml       # Helm chart with official CNPG cluster dependency
@@ -68,7 +68,7 @@ Typical lab infrastructure:
 │        │  └─ clusters/
 │        │     ├─ local/     # Local cluster Applications
 │        │     └─ cloud/     # Cloud cluster Applications
-│        └─ kustomize-deprecated/ # Old Kustomize files (deprecated)
+│        └─ README.md
 └─ clusters/
    ├─ local/                 # Local k3s deployments (reference only)
    │  ├─ dev/                # Development environment
@@ -82,7 +82,7 @@ Typical lab infrastructure:
       └─ prod/
 ```
 
-> **Migration Note:** This repository has migrated from Kustomize to Helm charts using the official CloudNativePG charts. Previous Kustomize configurations are preserved in `kustomize-deprecated/` folders. See `MIGRATION.md` for details.
+> **Migration Note:** This repository uses Helm charts with the official CloudNativePG charts. All configurations are self-contained within chart directories. See `docs/MIGRATION.md` for migration history.
 
 ### Planned
 
@@ -95,9 +95,11 @@ Typical lab infrastructure:
 │  ├─ security/              # Keycloak and security components
 │  └─ observability/         # Metrics/logs/tracing
 └─ docs/
-   ├─ quickstart.md
-   ├─ operations.md
-   └─ decisions/             # ADRs (Architecture Decision Records)
+   ├─ README.md              # Documentation index
+   ├─ MIGRATION.md           # Migration guide
+   ├─ SEALED-SECRETS-GUIDE.md
+   ├─ migration/             # Migration history
+   └─ guides/                # Deployment and troubleshooting guides
 ```
 
 ## Environment Strategy
@@ -111,7 +113,7 @@ Each environment (dev/qa/prod) is available in both **local** and **cloud** vari
 - **cloud/qa**: 2 instances, increased resources (1 CPU, 2Gi RAM) → namespace: `data-qa`
 - **cloud/prod**: 3 instances, HA setup (2 CPU, 4Gi RAM) → namespace: `data-prod`
 
-All environments use Helm values files to customize the base chart configuration in `apps/data/cnpg/`
+All environments use Helm values files to customize the base chart configuration in `apps/data/cnpg/environments/`
 
 ### Namespace Management
 
@@ -232,6 +234,8 @@ For GitOps deployments, use the Argo CD Application manifests:
 
 All manifests are self-contained within their respective chart directories.
 
+See `docs/guides/deployment.md` for detailed deployment instructions.
+
 ### Environment Selection
 
 To deploy to different environments, use the corresponding values file:
@@ -243,3 +247,15 @@ To deploy to different environments, use the corresponding values file:
 - **Cloud prod:** `environments/cloud/prod.yaml`
 
 Each values file is located in `apps/data/cnpg/environments/` and configures the appropriate namespace, resources, and storage class.
+
+## Documentation
+
+Comprehensive documentation is available in the `docs/` directory:
+
+- **[Documentation Index](docs/README.md)** - Complete documentation overview
+- **[Deployment Guide](docs/guides/deployment.md)** - Step-by-step deployment instructions
+- **[Troubleshooting Guide](docs/guides/troubleshooting.md)** - Common issues and solutions
+- **[Sealed Secrets Guide](docs/SEALED-SECRETS-GUIDE.md)** - Managing secrets securely
+- **[Migration Guide](docs/MIGRATION.md)** - Kustomize to Helm migration details
+
+## Contributing

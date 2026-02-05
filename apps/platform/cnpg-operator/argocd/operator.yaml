@@ -13,6 +13,7 @@ spec:
     path: apps/platform/cnpg-operator
     targetRevision: main
     helm:
+      releaseName: cnpg-operator
       valueFiles:
         - values.yaml
   
@@ -28,6 +29,7 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+      - RespectIgnoreDifferences=true 
     retry:
       limit: 5
       backoff:
@@ -40,3 +42,4 @@ spec:
       kind: CustomResourceDefinition
       jsonPointers:
         - /spec/conversion/webhook/clientConfig/caBundle
+        - /metadata/annotations

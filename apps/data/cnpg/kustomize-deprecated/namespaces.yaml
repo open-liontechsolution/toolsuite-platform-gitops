@@ -1,7 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: data-system
-  labels:
-    app.kubernetes.io/name: data-system
-    app.kubernetes.io/part-of: data-platform
