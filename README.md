@@ -57,21 +57,30 @@ Typical lab infrastructure:
 │  └─ data/                  # Data layer components
 │     └─ cnpg/               # PostgreSQL cluster resources (Helm chart)
 │        ├─ Chart.yaml       # Helm chart with official CNPG cluster dependency
-│        ├─ values.yaml      # Base cluster configuration
-│        ├─ values-local-*.yaml   # Local environment overrides (dev/qa/prod)
-│        ├─ values-cloud-*.yaml   # Cloud environment overrides (dev/qa/prod)
+│        ├─ values.yaml      # Base cluster configuration (shared)
 │        └─ kustomize-deprecated/ # Old Kustomize files (deprecated)
 └─ clusters/
    ├─ local/                 # Local k3s deployments (Longhorn storage)
    │  ├─ dev/                # Development environment (1 instance, minimal resources)
+   │  │  ├─ values.yaml      # Environment-specific Helm values
    │  │  ├─ secrets/         # Sealed secrets for this environment
    │  │  └─ README.md        # Deployment instructions
    │  ├─ qa/                 # QA environment (2 instances, moderate resources)
+   │  │  ├─ values.yaml      # Environment-specific Helm values
+   │  │  └─ secrets/
    │  └─ prod/               # Production environment (3 instances, high resources)
+   │     ├─ values.yaml      # Environment-specific Helm values
+   │     └─ secrets/
    └─ cloud/                 # Cloud deployments (EKS/GKE/AKS)
       ├─ dev/                # Development environment (2 instances)
+      │  ├─ values.yaml      # Environment-specific Helm values
+      │  └─ secrets/
       ├─ qa/                 # QA environment (2 instances, more resources)
+      │  ├─ values.yaml      # Environment-specific Helm values
+      │  └─ secrets/
       └─ prod/               # Production environment (3 instances, HA setup)
+         ├─ values.yaml      # Environment-specific Helm values
+         └─ secrets/
 ```
 
 > **Migration Note:** This repository has migrated from Kustomize to Helm charts using the official CloudNativePG charts. Previous Kustomize configurations are preserved in `kustomize-deprecated/` folders. See `MIGRATION.md` for details.
@@ -168,9 +177,6 @@ rm secrets/secret-app.yaml
 ### 3. Deploy PostgreSQL Clusters
 
 ```bash
-# Return to repo root
-cd ../../..
-
 # Update Helm dependencies
 cd apps/data/cnpg
 helm dependency update
@@ -181,7 +187,7 @@ helm upgrade --install platform-postgres-dev . \
   --namespace data-dev \
   --create-namespace \
   --values values.yaml \
-  --values values-local-dev.yaml
+  --values ../../clusters/local/dev/values.yaml
 
 # Or use Argo CD (recommended for GitOps)
 ```
@@ -199,11 +205,11 @@ See `argocd/` directory for example Application manifests.
 ### Environment Selection
 
 To deploy to different environments, use the corresponding values file:
-- **Local dev:** `values-local-dev.yaml`
-- **Local QA:** `values-local-qa.yaml`
-- **Local prod:** `values-local-prod.yaml`
-- **Cloud dev:** `values-cloud-dev.yaml`
-- **Cloud QA:** `values-cloud-qa.yaml`
-- **Cloud prod:** `values-cloud-prod.yaml`
+- **Local dev:** `../../clusters/local/dev/values.yaml`
+- **Local QA:** `../../clusters/local/qa/values.yaml`
+- **Local prod:** `../../clusters/local/prod/values.yaml`
+- **Cloud dev:** `../../clusters/cloud/dev/values.yaml`
+- **Cloud QA:** `../../clusters/cloud/qa/values.yaml`
+- **Cloud prod:** `../../clusters/cloud/prod/values.yaml`
 
-Each values file configures the appropriate namespace, resources, and storage class.
+Each values file is located in its respective environment directory and configures the appropriate namespace, resources, and storage class.

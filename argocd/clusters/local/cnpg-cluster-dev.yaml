@@ -16,7 +16,7 @@ spec:
       releaseName: platform-postgres-dev
       valueFiles:
         - values.yaml
-        - values-local-dev.yaml
+        - ../../clusters/local/dev/values.yaml
   
   destination:
     server: https://kubernetes.default.svc

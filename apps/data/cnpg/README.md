@@ -99,28 +99,28 @@ helm upgrade --install platform-postgres-dev . \
   --namespace data-dev \
   --create-namespace \
   --values values.yaml \
-  --values values-local-dev.yaml
+  --values ../../clusters/local/dev/values.yaml
 
 # Local QA environment
 helm upgrade --install platform-postgres-qa . \
   --namespace data-qa \
   --create-namespace \
   --values values.yaml \
-  --values values-local-qa.yaml
+  --values ../../clusters/local/qa/values.yaml
 
 # Local prod environment
 helm upgrade --install platform-postgres-prod . \
   --namespace data-prod \
   --create-namespace \
   --values values.yaml \
-  --values values-local-prod.yaml
+  --values ../../clusters/local/prod/values.yaml
 
-# Cloud environments (use values-cloud-*.yaml)
+# Cloud environments
 helm upgrade --install platform-postgres-prod . \
   --namespace data-prod \
   --create-namespace \
   --values values.yaml \
-  --values values-cloud-prod.yaml
+  --values ../../clusters/cloud/prod/values.yaml
 ```
 
 ### Using Argo CD
@@ -142,7 +142,7 @@ spec:
     helm:
       valueFiles:
         - values.yaml
-        - values-local-dev.yaml  # Change per environment
+        - ../../clusters/local/dev/values.yaml  # Change per environment
       releaseName: platform-postgres-dev
   destination:
     server: https://kubernetes.default.svc
@@ -222,7 +222,7 @@ Each environment uses a specific storage class:
 - **Local environments:** `longhorn`
 - **Cloud environments:** `gp3` (AWS), `pd-ssd` (GCP), `managed-premium` (Azure)
 
-To change the storage class, edit the environment-specific values file:
+To change the storage class, edit the environment-specific values file in `clusters/{local|cloud}/{env}/values.yaml`:
 
 ```yaml
 cluster:

@@ -64,7 +64,7 @@ helm upgrade --install platform-postgres-dev apps/data/cnpg \
   --namespace data-dev \
   --create-namespace \
   --values apps/data/cnpg/values.yaml \
-  --values apps/data/cnpg/values-local-dev.yaml
+  --values clusters/local/dev/values.yaml
 ```
 
 ### Using Argo CD

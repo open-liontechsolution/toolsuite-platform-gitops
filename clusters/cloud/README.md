@@ -74,11 +74,11 @@ rm secrets/secret-app.yaml
 ```bash
 cd ../../..  # Return to repo root
 helm dependency update apps/data/cnpg
-helm upgrade --install platform-postgres-dev apps/data/cnpg \
+helm upgrade --install platform-postgres-dev . \
   --namespace data-dev \
   --create-namespace \
-  --values apps/data/cnpg/values.yaml \
-  --values apps/data/cnpg/values-cloud-dev.yaml
+  --values values.yaml \
+  --values ../../clusters/cloud/dev/values.yaml
 ```
 
 ## Multi-AZ High Availability

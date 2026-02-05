@@ -63,7 +63,7 @@ helm upgrade --install platform-postgres-qa apps/data/cnpg \
   --namespace data-qa \
   --create-namespace \
   --values apps/data/cnpg/values.yaml \
-  --values apps/data/cnpg/values-cloud-qa.yaml
+  --values clusters/cloud/qa/values.yaml
 ```
 
 ### Using Argo CD

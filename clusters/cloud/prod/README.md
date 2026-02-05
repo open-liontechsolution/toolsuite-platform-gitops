@@ -65,7 +65,7 @@ helm upgrade --install platform-postgres-prod apps/data/cnpg \
   --namespace data-prod \
   --create-namespace \
   --values apps/data/cnpg/values.yaml \
-  --values apps/data/cnpg/values-cloud-prod.yaml
+  --values clusters/cloud/prod/values.yaml
 ```
 
 ### Using Argo CD (Recommended)

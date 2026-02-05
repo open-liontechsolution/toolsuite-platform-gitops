@@ -43,17 +43,12 @@ apps/
 │  └─ kustomize-deprecated/       # Old files preserved
 └─ data/cnpg/
    ├─ Chart.yaml                  # Helm chart with official cluster dependency
-   ├─ values.yaml                 # Base configuration
-   ├─ values-local-dev.yaml       # Environment-specific overrides
-   ├─ values-local-qa.yaml
-   ├─ values-local-prod.yaml
-   ├─ values-cloud-dev.yaml
-   ├─ values-cloud-qa.yaml
-   ├─ values-cloud-prod.yaml
+   ├─ values.yaml                 # Base configuration (shared)
    ├─ README.md
    └─ kustomize-deprecated/       # Old files preserved
 
 clusters/local/dev/
+├─ values.yaml                    # Environment-specific configuration
 ├─ secrets/
 │  ├─ secret-app.example.yaml    # Secret template
 │  └─ .gitignore
@@ -169,7 +164,7 @@ patches:
 #### Helm Values Example (New)
 
 ```yaml
-# apps/data/cnpg/values-local-dev.yaml
+# clusters/local/dev/values.yaml
 cluster:
   instances: 1
   resources:
@@ -267,7 +262,7 @@ spec:
     helm:
       valueFiles:
         - values.yaml
-        - values-local-dev.yaml
+        - ../../clusters/local/dev/values.yaml
       releaseName: platform-postgres-dev
   destination:
     namespace: data-dev
@@ -314,14 +309,14 @@ After successful migration, you can remove Kustomize references:
 
 ### Environment-Specific Values
 
-All environment-specific configurations are now in dedicated values files:
+All environment-specific configurations are now in dedicated values files located in each environment's directory:
 
-- `values-local-dev.yaml` - Local dev (1 instance, minimal resources)
-- `values-local-qa.yaml` - Local QA (2 instances, moderate resources)
-- `values-local-prod.yaml` - Local prod (3 instances, production resources)
-- `values-cloud-dev.yaml` - Cloud dev (2 instances, cloud storage)
-- `values-cloud-qa.yaml` - Cloud QA (2 instances, increased resources)
-- `values-cloud-prod.yaml` - Cloud prod (3 instances, full HA)
+- `clusters/local/dev/values.yaml` - Local dev (1 instance, minimal resources)
+- `clusters/local/qa/values.yaml` - Local QA (2 instances, moderate resources)
+- `clusters/local/prod/values.yaml` - Local prod (3 instances, production resources)
+- `clusters/cloud/dev/values.yaml` - Cloud dev (2 instances, cloud storage)
+- `clusters/cloud/qa/values.yaml` - Cloud QA (2 instances, increased resources)
+- `clusters/cloud/prod/values.yaml` - Cloud prod (3 instances, full HA)
 
 ## Rollback Procedure
 
@@ -397,12 +392,16 @@ If Argo CD shows out-of-sync after migration:
 ```bash
 # Update operator version
 # Edit Chart.yaml dependency version
+cd apps/platform/cnpg-operator
 helm dependency update
 helm upgrade cnpg-operator . -n cnpg-system
 
 # Update PostgreSQL version
-# Edit values.yaml imageName
-helm upgrade platform-postgres-dev . -n data-dev
+# Edit values.yaml imageName or environment-specific values
+cd apps/data/cnpg
+helm upgrade platform-postgres-dev . -n data-dev \
+  --values values.yaml \
+  --values ../../clusters/local/dev/values.yaml
 ```
 
 ### Cleaner Configuration

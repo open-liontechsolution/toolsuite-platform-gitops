@@ -56,7 +56,7 @@ helm upgrade --install platform-postgres-dev apps/data/cnpg \
   --namespace data-dev \
   --create-namespace \
   --values apps/data/cnpg/values.yaml \
-  --values apps/data/cnpg/values-local-dev.yaml
+  --values clusters/local/dev/values.yaml
 ```
 
 ### Method 2: Argo CD (Recommended)
@@ -77,9 +77,9 @@ See `argocd/README.md` for detailed GitOps deployment instructions.
 
 | Environment | Namespace | Instances | CPU/Memory | Storage | Values File |
 |-------------|-----------|-----------|------------|---------|-------------|
-| dev         | data-dev  | 1         | 250m/512Mi | 20Gi    | values-local-dev.yaml |
-| qa          | data-qa   | 2         | 500m/1Gi   | 30Gi    | values-local-qa.yaml |
-| prod        | data-prod | 3         | 1/2Gi      | 50Gi    | values-local-prod.yaml |
+| dev         | data-dev  | 1         | 250m/512Mi | 20Gi    | clusters/local/dev/values.yaml |
+| qa          | data-qa   | 2         | 500m/1Gi   | 30Gi    | clusters/local/qa/values.yaml |
+| prod        | data-prod | 3         | 1/2Gi      | 50Gi    | clusters/local/prod/values.yaml |
 
 **Storage Class:** `longhorn`
 
@@ -87,9 +87,9 @@ See `argocd/README.md` for detailed GitOps deployment instructions.
 
 | Environment | Namespace | Instances | CPU/Memory | Storage | Values File |
 |-------------|-----------|-----------|------------|---------|-------------|
-| dev         | data-dev  | 2         | 500m/1Gi   | 50Gi    | values-cloud-dev.yaml |
-| qa          | data-qa   | 2         | 1/2Gi      | 75Gi    | values-cloud-qa.yaml |
-| prod        | data-prod | 3         | 2/4Gi      | 200Gi   | values-cloud-prod.yaml |
+| dev         | data-dev  | 2         | 500m/1Gi   | 50Gi    | clusters/cloud/dev/values.yaml |
+| qa          | data-qa   | 2         | 1/2Gi      | 75Gi    | clusters/cloud/qa/values.yaml |
+| prod        | data-prod | 3         | 2/4Gi      | 200Gi   | clusters/cloud/prod/values.yaml |
 
 **Storage Class:** `gp3` (AWS), `pd-ssd` (GCP), `managed-premium` (Azure)
 
