@@ -73,7 +73,7 @@ echo -n "your-strong-password" | kubeseal --raw \
 Edit the environment's values file with the encrypted values:
 
 ```yaml
-# clusters/local/dev/values.yaml
+# apps/data/cnpg/environments/local/dev.yaml
 sealedSecret:
   enabled: true
   name: platform-postgres-app
@@ -107,7 +107,7 @@ kubectl apply -f argocd/clusters/local/cnpg-cluster-dev.yaml
 USERNAME_ENC=$(echo -n "platform" | kubeseal --raw --from-file=/dev/stdin --namespace data-dev --name platform-postgres-app)
 PASSWORD_ENC=$(echo -n "dev-password-123" | kubeseal --raw --from-file=/dev/stdin --namespace data-dev --name platform-postgres-app)
 
-# Update clusters/local/dev/values.yaml
+# Update apps/data/cnpg/environments/local/dev.yaml
 # Then commit and push
 ```
 

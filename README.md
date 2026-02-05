@@ -53,34 +53,33 @@ Typical lab infrastructure:
 │  │  └─ cnpg-operator/      # CloudNativePG operator (Helm chart)
 │  │     ├─ Chart.yaml       # Helm chart with official CNPG operator dependency
 │  │     ├─ values.yaml      # Operator configuration
+│  │     ├─ argocd/          # Argo CD Application manifests
+│  │     │  └─ operator.yaml
 │  │     └─ kustomize-deprecated/  # Old Kustomize files (deprecated)
 │  └─ data/                  # Data layer components
 │     └─ cnpg/               # PostgreSQL cluster resources (Helm chart)
 │        ├─ Chart.yaml       # Helm chart with official CNPG cluster dependency
 │        ├─ values.yaml      # Base cluster configuration (shared)
+│        ├─ templates/       # Helm templates (SealedSecret, etc.)
+│        ├─ environments/    # Environment-specific values
+│        │  ├─ local/        # Local environments (dev.yaml, qa.yaml, prod.yaml)
+│        │  └─ cloud/        # Cloud environments (dev.yaml, qa.yaml, prod.yaml)
+│        ├─ argocd/          # Argo CD Application manifests
+│        │  └─ clusters/
+│        │     ├─ local/     # Local cluster Applications
+│        │     └─ cloud/     # Cloud cluster Applications
 │        └─ kustomize-deprecated/ # Old Kustomize files (deprecated)
 └─ clusters/
-   ├─ local/                 # Local k3s deployments (Longhorn storage)
-   │  ├─ dev/                # Development environment (1 instance, minimal resources)
-   │  │  ├─ values.yaml      # Environment-specific Helm values
-   │  │  ├─ secrets/         # Sealed secrets for this environment
-   │  │  └─ README.md        # Deployment instructions
-   │  ├─ qa/                 # QA environment (2 instances, moderate resources)
-   │  │  ├─ values.yaml      # Environment-specific Helm values
-   │  │  └─ secrets/
-   │  └─ prod/               # Production environment (3 instances, high resources)
-   │     ├─ values.yaml      # Environment-specific Helm values
-   │     └─ secrets/
-   └─ cloud/                 # Cloud deployments (EKS/GKE/AKS)
-      ├─ dev/                # Development environment (2 instances)
-      │  ├─ values.yaml      # Environment-specific Helm values
-      │  └─ secrets/
-      ├─ qa/                 # QA environment (2 instances, more resources)
-      │  ├─ values.yaml      # Environment-specific Helm values
-      │  └─ secrets/
-      └─ prod/               # Production environment (3 instances, HA setup)
-         ├─ values.yaml      # Environment-specific Helm values
-         └─ secrets/
+   ├─ local/                 # Local k3s deployments (reference only)
+   │  ├─ dev/                # Development environment
+   │  │  ├─ secrets/         # Secret examples (deprecated, use values in chart)
+   │  │  └─ README.md        # Reference documentation
+   │  ├─ qa/
+   │  └─ prod/
+   └─ cloud/                 # Cloud deployments (reference only)
+      ├─ dev/
+      ├─ qa/
+      └─ prod/
 ```
 
 > **Migration Note:** This repository has migrated from Kustomize to Helm charts using the official CloudNativePG charts. Previous Kustomize configurations are preserved in `kustomize-deprecated/` folders. See `MIGRATION.md` for details.
@@ -186,7 +185,7 @@ echo -n "your-strong-password" | kubeseal --raw \
   --namespace data-dev \
   --name platform-postgres-app
 
-# Update clusters/local/dev/values.yaml with the encrypted values:
+# Update apps/data/cnpg/environments/local/dev.yaml with the encrypted values:
 # sealedSecret:
 #   enabled: true
 #   encryptedData:
@@ -194,7 +193,7 @@ echo -n "your-strong-password" | kubeseal --raw \
 #     password: "AgB..."  # Your encrypted password
 
 # Commit to Git
-git add clusters/local/dev/values.yaml
+git add apps/data/cnpg/environments/local/dev.yaml
 git commit -m "Add encrypted secrets for local dev"
 git push
 ```
@@ -214,33 +213,33 @@ helm upgrade --install platform-postgres-dev . \
   --namespace data-dev \
   --create-namespace \
   --values values.yaml \
-  --values ../../clusters/local/dev/values.yaml
+  --values environments/local/dev.yaml
 
 # The deployment will create both the cluster and the SealedSecret
 # The sealed-secrets controller will automatically unseal it
 
 # Or use Argo CD (recommended for GitOps)
-kubectl apply -f argocd/clusters/local/cnpg-cluster-dev.yaml
+kubectl apply -f apps/data/cnpg/argocd/clusters/local/dev.yaml
 ```
 
 **Important:** The CNPG operator must be deployed before any PostgreSQL clusters.
 
 ### Using Argo CD (Recommended)
 
-For GitOps deployments, create Argo CD Applications pointing to:
-- Operator: `apps/platform/cnpg-operator`
-- Clusters: `apps/data/cnpg` with appropriate values files
+For GitOps deployments, use the Argo CD Application manifests:
+- Operator: `apps/platform/cnpg-operator/argocd/operator.yaml`
+- Clusters: `apps/data/cnpg/argocd/clusters/{local|cloud}/{env}.yaml`
 
-See `argocd/` directory for example Application manifests.
+All manifests are self-contained within their respective chart directories.
 
 ### Environment Selection
 
 To deploy to different environments, use the corresponding values file:
-- **Local dev:** `../../clusters/local/dev/values.yaml`
-- **Local QA:** `../../clusters/local/qa/values.yaml`
-- **Local prod:** `../../clusters/local/prod/values.yaml`
-- **Cloud dev:** `../../clusters/cloud/dev/values.yaml`
-- **Cloud QA:** `../../clusters/cloud/qa/values.yaml`
-- **Cloud prod:** `../../clusters/cloud/prod/values.yaml`
+- **Local dev:** `environments/local/dev.yaml`
+- **Local QA:** `environments/local/qa.yaml`
+- **Local prod:** `environments/local/prod.yaml`
+- **Cloud dev:** `environments/cloud/dev.yaml`
+- **Cloud QA:** `environments/cloud/qa.yaml`
+- **Cloud prod:** `environments/cloud/prod.yaml`
 
-Each values file is located in its respective environment directory and configures the appropriate namespace, resources, and storage class.
+Each values file is located in `apps/data/cnpg/environments/` and configures the appropriate namespace, resources, and storage class.
