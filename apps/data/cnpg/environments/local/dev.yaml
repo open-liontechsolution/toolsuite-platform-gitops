@@ -74,8 +74,8 @@ cluster:
       default_statistics_target: "100"
       random_page_cost: "1.1"
       effective_io_concurrency: "200"
-      min_wal_size: "1GB"
-      max_wal_size: "4GB"
+      min_wal_size: "128MB"
+      max_wal_size: "512MB"
 
 # SealedSecret configuration for local dev
 # IMPORTANT: Replace these placeholder values with actual encrypted secrets
