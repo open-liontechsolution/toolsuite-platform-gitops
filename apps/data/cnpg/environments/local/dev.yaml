@@ -5,9 +5,8 @@
 # Chart mode
 mode: standalone
 
-# Values for the CloudNativePG cluster subchart (aliased as 'cnpg')
-cnpg:
-  cluster:
+# Values for the CloudNativePG cluster subchart
+cluster:
     # Cluster name
     name: platform-postgres-dev
 

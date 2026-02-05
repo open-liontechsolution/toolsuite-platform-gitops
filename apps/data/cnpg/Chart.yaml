@@ -9,7 +9,6 @@ dependencies:
   - name: cluster
     version: "0.0.10"
     repository: https://cloudnative-pg.github.io/charts
-    alias: cnpg
 
 maintainers:
   - name: Platform Team

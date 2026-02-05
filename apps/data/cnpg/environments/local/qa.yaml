@@ -2,9 +2,8 @@
 # Namespace: data-qa
 # Deployment: local k3s cluster with Longhorn storage
 
-# Values for the CloudNativePG cluster subchart (aliased as 'cnpg')
-cnpg:
-  cluster:
+# Values for the CloudNativePG cluster subchart
+cluster:
     # Two instances for HA
     instances: 2
     

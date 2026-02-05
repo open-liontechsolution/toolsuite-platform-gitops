@@ -2,9 +2,8 @@
 # Namespace: data-qa
 # Deployment: Cloud Kubernetes (EKS/GKE/AKS)
 
-# Values for the CloudNativePG cluster subchart (aliased as 'cnpg')
-cnpg:
-  cluster:
+# Values for the CloudNativePG cluster subchart
+cluster:
     # Two instances for cloud HA
     instances: 2
     
