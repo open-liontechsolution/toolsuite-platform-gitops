@@ -2,7 +2,14 @@
 # This is the base configuration shared across all environments
 # Environment-specific overrides are in values-{local|cloud}-{dev|qa|prod}.yaml
 
-cluster:
+# Type of service (default is ClusterIP)
+type: ClusterIP
+
+# Additional configurations
+mode: standalone
+
+# Values for the CloudNativePG cluster subchart (aliased as 'cnpg')
+cnpg:
   # Cluster name
   name: platform-postgres
   
@@ -113,12 +120,6 @@ cluster:
   
   # Additional annotations
   annotations: {}
-
-# Type of service (default is ClusterIP)
-type: ClusterIP
-
-# Additional configurations
-mode: standalone
 
 # SealedSecret configuration
 # This creates a SealedSecret that will be unsealed by the sealed-secrets controller

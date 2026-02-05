@@ -5,7 +5,8 @@
 # Chart mode
 mode: standalone
 
-cluster:
+# Values for the CloudNativePG cluster subchart (aliased as 'cnpg')
+cnpg:
   # Cluster name
   name: platform-postgres-dev
 
@@ -49,7 +50,7 @@ cluster:
     environment: dev
     deployment: local
   
-    # Bootstrap configuration
+  # Bootstrap configuration
   bootstrap:
     initdb:
       database: platform

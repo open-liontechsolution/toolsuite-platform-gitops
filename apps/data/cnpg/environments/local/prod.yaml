@@ -2,7 +2,8 @@
 # Namespace: data-prod
 # Deployment: local k3s cluster with Longhorn storage
 
-cluster:
+# Values for the CloudNativePG cluster subchart (aliased as 'cnpg')
+cnpg:
   # Three instances for full HA
   instances: 3
   

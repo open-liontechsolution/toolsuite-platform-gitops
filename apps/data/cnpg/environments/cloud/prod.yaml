@@ -2,7 +2,8 @@
 # Namespace: data-prod
 # Deployment: Cloud Kubernetes (EKS/GKE/AKS)
 
-cluster:
+# Values for the CloudNativePG cluster subchart (aliased as 'cnpg')
+cnpg:
   # Three instances for full HA across zones
   instances: 3
   
