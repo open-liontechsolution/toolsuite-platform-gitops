@@ -1,0 +1,93 @@
+# Cloud Production Environment Configuration
+# Namespace: data-prod
+# Deployment: Cloud Kubernetes (EKS/GKE/AKS)
+
+cluster:
+  # Three instances for full HA across zones
+  instances: 3
+  
+  # Storage configuration for cloud (AWS gp3 by default)
+  storage:
+    size: 200Gi
+    storageClass: gp3
+    # For GCP use: pd-ssd
+    # For Azure use: managed-premium
+  
+  # Cloud production resources
+  resources:
+    requests:
+      cpu: "2"
+      memory: "4Gi"
+    limits:
+      cpu: "8"
+      memory: "16Gi"
+  
+  # Anti-affinity for multi-AZ with required distribution
+  affinity:
+    enablePodAntiAffinity: true
+    topologyKey: topology.kubernetes.io/zone
+    podAntiAffinityType: required
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          preference:
+            matchExpressions:
+              - key: workload
+                operator: In
+                values:
+                  - database
+  
+  # Environment labels
+  labels:
+    app.kubernetes.io/part-of: data-platform
+    environment: prod
+    deployment: cloud
+  
+  # PostgreSQL tuning for cloud production
+  postgresql:
+    parameters:
+      max_connections: "300"
+      shared_buffers: "1GB"
+      effective_cache_size: "3GB"
+      maintenance_work_mem: "256MB"
+      work_mem: "3495kB"
+      max_wal_size: "8GB"
+  
+  # Enable monitoring for production
+  monitoring:
+    enabled: false
+    podMonitorEnabled: false
+    # Uncomment when Prometheus is available:
+    # enabled: true
+    # podMonitorEnabled: true
+  
+  # Backup configuration (configure with your cloud storage)
+  backup:
+    enabled: false
+    # Uncomment and configure for production backups:
+    # enabled: true
+    # barmanObjectStore:
+    #   destinationPath: s3://your-backup-bucket/prod-backups
+    #   s3Credentials:
+    #     accessKeyId:
+    #       name: backup-credentials
+    #       key: ACCESS_KEY_ID
+    #     secretAccessKey:
+    #       name: backup-credentials
+    #       key: ACCESS_SECRET_KEY
+    #   wal:
+    #     compression: gzip
+    #     encryption: AES256
+    #   data:
+    #     compression: gzip
+    #     encryption: AES256
+    # retentionPolicy: "30d"
+  
+  # Scheduled backups
+  scheduledBackup:
+    enabled: false
+    # Uncomment to enable:
+    # enabled: true
+    # name: daily-backup
+    # schedule: "0 2 * * *"
+    # backupOwnerReference: self

@@ -1,64 +1,152 @@
-# CloudNativePG (CNPG) - Postgres GitOps Base
+# CloudNativePG PostgreSQL Cluster (Helm Chart)
 
-This directory provides the **base** manifests for installing the CNPG operator and a highly available Postgres cluster. It is designed to be consumed by Argo CD as a Kustomize application, with environment-specific overlays under `clusters/`.
+This component deploys highly available PostgreSQL clusters using the official CloudNativePG cluster Helm chart. Each environment (dev/qa/prod) can be deployed independently with environment-specific configurations.
 
-## What this base includes
+## Overview
 
-- A 3-instance Postgres cluster (`platform-postgres`) base configuration.
-- Anti-affinity to spread replicas across nodes.
-- Node **preference** for `workload=db` nodes using node affinity.
-- Logical backup CronJob writing to a PVC.
-- SealedSecret placeholder for application credentials (`platform-postgres-app`).
-
-**Note:** The CNPG operator is deployed separately in `apps/platform/cnpg-operator/` and must be installed first.
+The cluster chart uses the official [CloudNativePG cluster chart](https://github.com/cloudnative-pg/charts/tree/main/charts/cluster) as a dependency, with customized values for each environment.
 
 ## Prerequisites
 
-Before deploying any PostgreSQL cluster, ensure the CNPG operator is installed:
+- CloudNativePG operator must be installed first (see `apps/platform/cnpg-operator/`)
+- Kubernetes cluster with appropriate storage class configured
+- Helm 3.x installed
+- kubectl configured to access the cluster
+- Application secret created in target namespace
 
-```bash
-# Deploy operator (once per cluster)
-kustomize build apps/platform/cnpg-operator | kubectl apply -f -
+## Available Environments
 
-# Verify operator is running
-kubectl get pods -n cnpg-system
+### Local Environments (k3s + Longhorn)
+
+| Environment | Namespace | Instances | CPU Request | Memory Request | Storage |
+|-------------|-----------|-----------|-------------|----------------|---------|
+| **dev**     | data-dev  | 1         | 250m        | 512Mi          | 20Gi    |
+| **qa**      | data-qa   | 2         | 500m        | 1Gi            | 30Gi    |
+| **prod**    | data-prod | 3         | 1           | 2Gi            | 50Gi    |
+
+### Cloud Environments (EKS/GKE/AKS)
+
+| Environment | Namespace | Instances | CPU Request | Memory Request | Storage |
+|-------------|-----------|-----------|-------------|----------------|---------|
+| **dev**     | data-dev  | 2         | 500m        | 1Gi            | 50Gi    |
+| **qa**      | data-qa   | 2         | 1           | 2Gi            | 75Gi    |
+| **prod**    | data-prod | 3         | 2           | 4Gi            | 200Gi   |
+
+## Secrets Management
+
+Before deploying a cluster, create the application secret in the target namespace:
+
+### Option 1: Using Sealed Secrets (Recommended for GitOps)
+
+1. Create a plain secret file:
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: platform-postgres-app
+  namespace: data-dev  # Change per environment
+type: kubernetes.io/basic-auth
+stringData:
+  username: platform
+  password: "your-strong-password-here"
 ```
 
-Or create an Argo CD Application for the operator (see `apps/platform/cnpg-operator/README.md`).
+2. Encrypt with kubeseal:
+```bash
+kubeseal --format=yaml \
+  --namespace data-dev \
+  < secret-app.yaml \
+  > sealedsecret-app.yaml
+```
 
-## Argo CD usage
+3. Apply the sealed secret:
+```bash
+kubectl apply -f sealedsecret-app.yaml
+```
 
-Point an Argo CD Application at one of the environment overlays. The repository now supports multiple environments in both local and cloud deployments:
+4. Delete the plain secret file:
+```bash
+rm secret-app.yaml
+```
 
-**Local environments (k3s + Longhorn):**
-- `clusters/local/dev` - Development (1 instance, minimal resources)
-- `clusters/local/qa` - QA (2 instances, moderate resources)
-- `clusters/local/prod` - Production (3 instances, high resources)
+### Option 2: Using kubectl (Development Only)
 
-**Cloud environments (EKS/GKE/AKS):**
-- `clusters/cloud/dev` - Development (2 instances)
-- `clusters/cloud/qa` - QA (2 instances, increased resources)
-- `clusters/cloud/prod` - Production (3 instances, HA setup)
+```bash
+kubectl create secret generic platform-postgres-app \
+  --namespace data-dev \
+  --from-literal=username=platform \
+  --from-literal=password=your-password
+```
 
-Example Argo CD Application:
+**Security Note:** Never commit plain secrets to Git.
 
-> **Note:** Replace `<org>` with your GitHub organization or username in the `repoURL` below.
+## Deployment
+
+### Using Helm CLI
+
+First, update Helm dependencies:
+
+```bash
+cd apps/data/cnpg
+helm dependency update
+```
+
+Deploy to a specific environment:
+
+```bash
+# Local dev environment
+helm upgrade --install platform-postgres-dev . \
+  --namespace data-dev \
+  --create-namespace \
+  --values values.yaml \
+  --values values-local-dev.yaml
+
+# Local QA environment
+helm upgrade --install platform-postgres-qa . \
+  --namespace data-qa \
+  --create-namespace \
+  --values values.yaml \
+  --values values-local-qa.yaml
+
+# Local prod environment
+helm upgrade --install platform-postgres-prod . \
+  --namespace data-prod \
+  --create-namespace \
+  --values values.yaml \
+  --values values-local-prod.yaml
+
+# Cloud environments (use values-cloud-*.yaml)
+helm upgrade --install platform-postgres-prod . \
+  --namespace data-prod \
+  --create-namespace \
+  --values values.yaml \
+  --values values-cloud-prod.yaml
+```
+
+### Using Argo CD
+
+Create an Argo CD Application for each environment:
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: data-cnpg-dev
+  name: cnpg-cluster-local-dev
   namespace: argocd
 spec:
   project: default
   source:
-    repoURL: https://github.com/<org>/toolsuite-platform-gitops
-    path: clusters/local/dev  # Change to local/qa, local/prod, cloud/dev, etc.
+    repoURL: https://github.com/<your-org>/toolsuite-platform-gitops
+    path: apps/data/cnpg
     targetRevision: main
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-local-dev.yaml  # Change per environment
+      releaseName: platform-postgres-dev
   destination:
     server: https://kubernetes.default.svc
-    namespace: data-system
+    namespace: data-dev  # Change per environment
   syncPolicy:
     automated:
       prune: true
@@ -69,92 +157,257 @@ spec:
 
 ## Verification
 
-After Argo CD sync or manual deployment:
+After deployment, verify the cluster is running:
 
 ```bash
-# Check CNPG operator (common to all environments)
-kubectl get pods -n cnpg-system
+# Check Helm release
+helm list -n data-dev
 
-# Check your specific environment (replace data-dev with your namespace)
-kubectl get pods -n data-dev
+# Check cluster status
 kubectl get cluster -n data-dev
-kubectl get services -n data-dev | grep platform-postgres
-kubectl get cronjob -n data-dev
+kubectl cnpg status platform-postgres -n data-dev
+
+# Check pods
+kubectl get pods -n data-dev
+
+# Check services
+kubectl get svc -n data-dev
+
+# Expected services:
+# - platform-postgres-rw (read-write primary)
+# - platform-postgres-ro (read-only replicas)
+# - platform-postgres-r  (read service)
+
+# Check PVCs
 kubectl get pvc -n data-dev
 ```
 
-> **Note:** The `cnpg-system` namespace is automatically created by the CNPG operator manifest. Each environment creates its own namespace (`data-dev`, `data-qa`, or `data-prod`) through Kustomize transformation.
+## Connecting to the Database
 
-CNPG automatically creates services:
+### From within the cluster
 
-- `platform-postgres-rw` (read/write primary)
-- `platform-postgres-ro` (read-only)
-
-## Credentials strategy
-
-- **Superuser** credentials are generated by CNPG and stored in the secret:
-  - `platform-postgres-superuser` (auto-created by the operator).
-- **Application** credentials must be created manually using one of these approaches:
-
-### Option 1: Using Sealed Secrets (Recommended for GitOps)
-
-1. Create a plain secret based on the example:
-   ```bash
-   cp apps/data/cnpg/secret-app.example.yaml apps/data/cnpg/secret-app.yaml
-   # Edit secret-app.yaml and set a strong password
-   ```
-
-2. Encrypt it with kubeseal:
-   ```bash
-   kubeseal --format=yaml \
-     < apps/data/cnpg/secret-app.yaml \
-     > apps/data/cnpg/sealedsecret-app.yaml
-   ```
-
-3. Add the sealed secret to your environment's kustomization:
-   ```yaml
-   # In clusters/local/dev/kustomization.yaml (or your target environment)
-   resources:
-     - ../../../apps/data/cnpg
-     - ../../../apps/data/cnpg/sealedsecret-app.yaml
-   ```
-
-4. Delete the plain secret file:
-   ```bash
-   rm apps/data/cnpg/secret-app.yaml
-   ```
-
-### Option 2: Using Plain Secrets (Development only)
-
-For local development, you can apply the secret directly:
 ```bash
-kubectl apply -f apps/data/cnpg/secret-app.example.yaml
+# Read-write connection (primary)
+psql -h platform-postgres-rw.data-dev.svc.cluster.local -U platform -d platform
+
+# Read-only connection (replicas)
+psql -h platform-postgres-ro.data-dev.svc.cluster.local -U platform -d platform
 ```
 
-> **Security Note:** Never commit plain secrets to Git. Use Sealed Secrets, external secret managers (e.g., External Secrets Operator), or apply secrets manually.
+### Port-forward for local access
 
-### Example Files Provided
+```bash
+kubectl port-forward -n data-dev svc/platform-postgres-rw 5432:5432
 
-- `secret-app.example.yaml` - Plain secret template (use this to create your secret)
-- `sealedsecret-app.example.yaml` - Sealed secret template (reference for structure)
+# Then connect locally
+psql -h localhost -U platform -d platform
+```
+
+### Get credentials
+
+```bash
+# Application credentials
+kubectl get secret platform-postgres-app -n data-dev -o jsonpath='{.data.password}' | base64 -d
+
+# Superuser credentials (auto-generated by CNPG)
+kubectl get secret platform-postgres-superuser -n data-dev -o jsonpath='{.data.password}' | base64 -d
+```
+
+## Configuration
+
+### Storage Class
+
+Each environment uses a specific storage class:
+
+- **Local environments:** `longhorn`
+- **Cloud environments:** `gp3` (AWS), `pd-ssd` (GCP), `managed-premium` (Azure)
+
+To change the storage class, edit the environment-specific values file:
+
+```yaml
+cluster:
+  storage:
+    storageClass: your-storage-class
+```
+
+### Resource Limits
+
+Adjust resources in the environment-specific values file:
+
+```yaml
+cluster:
+  resources:
+    requests:
+      cpu: "2"
+      memory: "4Gi"
+    limits:
+      cpu: "8"
+      memory: "16Gi"
+```
+
+### Instance Count
+
+Change the number of PostgreSQL instances:
+
+```yaml
+cluster:
+  instances: 3  # 1 for dev, 2 for HA, 3 for full HA
+```
+
+### PostgreSQL Parameters
+
+Tune PostgreSQL settings in the values file:
+
+```yaml
+cluster:
+  postgresql:
+    parameters:
+      max_connections: "300"
+      shared_buffers: "1GB"
+      effective_cache_size: "3GB"
+```
 
 ## Backups
 
-A logical backup CronJob runs nightly and stores dumps in the PVC `platform-postgres-backups`.
+### Logical Backups (Custom CronJob)
 
-### Restore procedure
+The previous Kustomize setup included a custom logical backup CronJob. For Helm deployments, you have two options:
 
-1. Identify the backup file in the PVC (replace `data-dev` with your namespace):
-   ```bash
-   kubectl exec -n data-dev platform-postgres-1 -- ls -lh /backups
-   ```
-2. Copy the file locally (optional):
-   ```bash
-   kubectl cp data-dev/<backup-pod>:/backups/cluster-<timestamp>.sql ./cluster.sql
-   ```
-3. Restore into the primary:
-   ```bash
-   kubectl exec -n data-dev -it <primary-pod> -- psql -U postgres -f /backups/cluster-<timestamp>.sql
-   ```
+#### Option 1: Use CNPG Native Backups (Recommended)
 
-> Tip: you can also attach the backup PVC to a temporary job or pod for inspection.
+Configure in the values file:
+
+```yaml
+cluster:
+  backup:
+    enabled: true
+    barmanObjectStore:
+      destinationPath: s3://your-bucket/backups
+      s3Credentials:
+        accessKeyId:
+          name: backup-credentials
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: backup-credentials
+          key: ACCESS_SECRET_KEY
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
+    retentionPolicy: "30d"
+  
+  scheduledBackup:
+    enabled: true
+    name: daily-backup
+    schedule: "0 2 * * *"
+```
+
+#### Option 2: Custom Backup CronJob
+
+The old backup CronJob and PVC are preserved in `kustomize-deprecated/` and can be deployed separately if needed.
+
+### Restore from Backup
+
+See [CNPG Recovery Documentation](https://cloudnative-pg.io/documentation/current/recovery/) for detailed restore procedures.
+
+## Monitoring
+
+Enable Prometheus monitoring:
+
+```yaml
+cluster:
+  monitoring:
+    enabled: true
+    podMonitorEnabled: true
+```
+
+Metrics will be available at:
+- `http://platform-postgres-rw:9187/metrics` (primary)
+- `http://platform-postgres-ro:9187/metrics` (replicas)
+
+## Upgrading
+
+### Upgrade PostgreSQL Version
+
+Update the image in `values.yaml`:
+
+```yaml
+cluster:
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.5
+```
+
+Then upgrade the release:
+
+```bash
+helm upgrade platform-postgres-dev . \
+  --namespace data-dev \
+  --values values.yaml \
+  --values values-local-dev.yaml
+```
+
+### Upgrade Helm Chart
+
+Update dependencies and upgrade:
+
+```bash
+helm dependency update
+helm upgrade platform-postgres-dev . --namespace data-dev
+```
+
+## Troubleshooting
+
+### Cluster not starting
+
+Check operator logs:
+```bash
+kubectl logs -n cnpg-system -l app.kubernetes.io/name=cloudnative-pg
+```
+
+Check cluster events:
+```bash
+kubectl describe cluster platform-postgres -n data-dev
+```
+
+### Connection issues
+
+Verify services exist:
+```bash
+kubectl get svc -n data-dev | grep platform-postgres
+```
+
+Check pod status:
+```bash
+kubectl get pods -n data-dev
+kubectl logs -n data-dev platform-postgres-1
+```
+
+### Storage issues
+
+Check PVC status:
+```bash
+kubectl get pvc -n data-dev
+kubectl describe pvc -n data-dev
+```
+
+Verify storage class exists:
+```bash
+kubectl get storageclass
+```
+
+## Migration from Kustomize
+
+The previous Kustomize configuration is preserved in `kustomize-deprecated/` for reference. Key differences:
+
+- **Kustomize:** Used patches to customize base manifests
+- **Helm:** Uses values files for parameterization
+- **Configuration:** All settings are now in values-*.yaml files
+- **Deployment:** Helm manages the lifecycle instead of kubectl/kustomize
+
+See the main repository's `MIGRATION.md` for detailed migration instructions.
+
+## References
+
+- [CloudNativePG Documentation](https://cloudnative-pg.io/)
+- [CloudNativePG Cluster Chart](https://github.com/cloudnative-pg/charts/tree/main/charts/cluster)
+- [PostgreSQL Configuration](https://www.postgresql.org/docs/current/runtime-config.html)
+- [CNPG Backup & Recovery](https://cloudnative-pg.io/documentation/current/backup_recovery/)

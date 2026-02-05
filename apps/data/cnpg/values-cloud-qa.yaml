@@ -1,0 +1,53 @@
+# Cloud QA Environment Configuration
+# Namespace: data-qa
+# Deployment: Cloud Kubernetes (EKS/GKE/AKS)
+
+cluster:
+  # Two instances for cloud HA
+  instances: 2
+  
+  # Storage configuration for cloud (AWS gp3 by default)
+  storage:
+    size: 75Gi
+    storageClass: gp3
+    # For GCP use: pd-ssd
+    # For Azure use: managed-premium
+  
+  # Cloud QA resources
+  resources:
+    requests:
+      cpu: "1"
+      memory: "2Gi"
+    limits:
+      cpu: "3"
+      memory: "6Gi"
+  
+  # Anti-affinity for multi-AZ
+  affinity:
+    enablePodAntiAffinity: true
+    topologyKey: topology.kubernetes.io/zone
+    podAntiAffinityType: preferred
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          preference:
+            matchExpressions:
+              - key: workload
+                operator: In
+                values:
+                  - database
+  
+  # Environment labels
+  labels:
+    app.kubernetes.io/part-of: data-platform
+    environment: qa
+    deployment: cloud
+  
+  # PostgreSQL tuning for cloud QA
+  postgresql:
+    parameters:
+      max_connections: "200"
+      shared_buffers: "512MB"
+      effective_cache_size: "1536MB"
+      maintenance_work_mem: "128MB"
+      work_mem: "2621kB"

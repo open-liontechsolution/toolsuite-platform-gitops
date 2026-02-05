@@ -1,0 +1,62 @@
+# CloudNativePG Operator Configuration
+# This chart deploys the CNPG operator cluster-wide
+
+cloudnative-pg:
+  # Operator configuration
+  config:
+    # Deploy operator cluster-wide (watches all namespaces)
+    clusterWide: true
+    
+    # Operator logging configuration
+    logLevel: info
+    
+  # Operator pod resources
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  
+  # Replica count for operator
+  replicaCount: 1
+  
+  # Image configuration (uses official images)
+  image:
+    pullPolicy: IfNotPresent
+  
+  # Monitoring configuration
+  monitoring:
+    # Enable Prometheus metrics
+    podMonitorEnabled: false
+    # Uncomment to enable monitoring:
+    # podMonitorEnabled: true
+    # podMonitor:
+    #   enabled: true
+    #   labels:
+    #     prometheus: kube-prometheus
+  
+  # Security context
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+    capabilities:
+      drop:
+        - ALL
+  
+  # Service account
+  serviceAccount:
+    create: true
+    name: ""
+  
+  # Webhook configuration
+  webhook:
+    port: 9443
+    mutating:
+      create: true
+    validating:
+      create: true

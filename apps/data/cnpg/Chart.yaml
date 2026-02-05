@@ -1,0 +1,26 @@
+apiVersion: v2
+name: cnpg-cluster
+description: CloudNativePG PostgreSQL Cluster - Highly available PostgreSQL cluster
+type: application
+version: 1.0.0
+appVersion: "16.4"
+
+dependencies:
+  - name: cluster
+    version: "0.0.10"
+    repository: https://cloudnative-pg.github.io/charts
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+keywords:
+  - postgresql
+  - database
+  - cluster
+  - cloudnative-pg
+  - ha
+
+home: https://cloudnative-pg.io
+sources:
+  - https://github.com/cloudnative-pg/cloudnative-pg

@@ -18,6 +18,7 @@ This repo prioritizes:
 ## Core stack
 
 - GitOps: **Argo CD**
+- Package Management: **Helm 3** (official CloudNativePG charts)
 - CI: **GitHub Actions** (or Argo Workflows)
 - Distributed block storage: **Longhorn**
 - HA PostgreSQL in Kubernetes: **CloudNativePG (CNPG)**
@@ -43,18 +44,28 @@ Typical lab infrastructure:
 
 ## Repository layout
 
-### Currently Implemented
+### Currently Implemented (Helm-based)
 
 ```text
 .
 ├─ apps/
 │  ├─ platform/              # Platform infrastructure (deploy once per cluster)
-│  │  └─ cnpg-operator/      # CloudNativePG operator
+│  │  └─ cnpg-operator/      # CloudNativePG operator (Helm chart)
+│  │     ├─ Chart.yaml       # Helm chart with official CNPG operator dependency
+│  │     ├─ values.yaml      # Operator configuration
+│  │     └─ kustomize-deprecated/  # Old Kustomize files (deprecated)
 │  └─ data/                  # Data layer components
-│     └─ cnpg/               # PostgreSQL cluster resources
+│     └─ cnpg/               # PostgreSQL cluster resources (Helm chart)
+│        ├─ Chart.yaml       # Helm chart with official CNPG cluster dependency
+│        ├─ values.yaml      # Base cluster configuration
+│        ├─ values-local-*.yaml   # Local environment overrides (dev/qa/prod)
+│        ├─ values-cloud-*.yaml   # Cloud environment overrides (dev/qa/prod)
+│        └─ kustomize-deprecated/ # Old Kustomize files (deprecated)
 └─ clusters/
    ├─ local/                 # Local k3s deployments (Longhorn storage)
    │  ├─ dev/                # Development environment (1 instance, minimal resources)
+   │  │  ├─ secrets/         # Sealed secrets for this environment
+   │  │  └─ README.md        # Deployment instructions
    │  ├─ qa/                 # QA environment (2 instances, moderate resources)
    │  └─ prod/               # Production environment (3 instances, high resources)
    └─ cloud/                 # Cloud deployments (EKS/GKE/AKS)
@@ -62,6 +73,8 @@ Typical lab infrastructure:
       ├─ qa/                 # QA environment (2 instances, more resources)
       └─ prod/               # Production environment (3 instances, HA setup)
 ```
+
+> **Migration Note:** This repository has migrated from Kustomize to Helm charts using the official CloudNativePG charts. Previous Kustomize configurations are preserved in `kustomize-deprecated/` folders. See `MIGRATION.md` for details.
 
 ### Planned
 
@@ -90,7 +103,7 @@ Each environment (dev/qa/prod) is available in both **local** and **cloud** vari
 - **cloud/qa**: 2 instances, increased resources (1 CPU, 2Gi RAM) → namespace: `data-qa`
 - **cloud/prod**: 3 instances, HA setup (2 CPU, 4Gi RAM) → namespace: `data-prod`
 
-All environments use Kustomize overlays to customize the base manifests in `apps/`
+All environments use Helm values files to customize the base chart configuration in `apps/data/cnpg/`
 
 ### Namespace Management
 
@@ -105,11 +118,11 @@ This allows multiple environments to coexist in the same cluster if needed, with
 
 Each environment must have its own sealed secret:
 
-1. Copy the example: `cp apps/data/cnpg/secret-app.example.yaml clusters/local/dev/secret-app.yaml`
+1. Copy the example: `cp clusters/local/dev/secrets/secret-app.example.yaml clusters/local/dev/secrets/secret-app.yaml`
 2. Edit and set a strong password
-3. Encrypt: `kubeseal --format=yaml --namespace data-dev < secret-app.yaml > sealedsecret-app.yaml`
-4. Uncomment the secret reference in the environment's `kustomization.yaml`
-5. Delete the plain secret file
+3. Encrypt: `kubeseal --format=yaml --namespace data-dev < clusters/local/dev/secrets/secret-app.yaml > clusters/local/dev/secrets/sealedsecret-app.yaml`
+4. Apply the sealed secret: `kubectl apply -f clusters/local/dev/secrets/sealedsecret-app.yaml`
+5. Delete the plain secret file: `rm clusters/local/dev/secrets/secret-app.yaml`
 
 See individual environment READMEs for detailed instructions
 
@@ -118,42 +131,79 @@ See individual environment READMEs for detailed instructions
 ### 1. Deploy Platform Infrastructure (Once per Cluster)
 
 ```bash
+# Update Helm dependencies
+cd apps/platform/cnpg-operator
+helm dependency update
+
 # Deploy CNPG operator
-kustomize build apps/platform/cnpg-operator | kubectl apply -f -
+helm upgrade --install cnpg-operator . \
+  --namespace cnpg-system \
+  --create-namespace \
+  --values values.yaml
 
 # Verify operator is running
 kubectl get pods -n cnpg-system
 ```
 
-### 2. Deploy Application Environments
+### 2. Create Application Secrets
 
 ```bash
-# Deploy your chosen environment
-kustomize build clusters/local/dev | kubectl apply -f -
+# For each environment, create and seal the secret
+cd clusters/local/dev
+cp secrets/secret-app.example.yaml secrets/secret-app.yaml
+# Edit secrets/secret-app.yaml and set a strong password
 
-# Or use Argo CD (recommended)
+# Encrypt with kubeseal
+kubeseal --format=yaml --namespace data-dev \
+  < secrets/secret-app.yaml \
+  > secrets/sealedsecret-app.yaml
+
+# Apply the sealed secret
+kubectl apply -f secrets/sealedsecret-app.yaml
+
+# Delete the plain secret
+rm secrets/secret-app.yaml
+```
+
+### 3. Deploy PostgreSQL Clusters
+
+```bash
+# Return to repo root
+cd ../../..
+
+# Update Helm dependencies
+cd apps/data/cnpg
+helm dependency update
+
+# Deploy to your chosen environment
+# Local dev example:
+helm upgrade --install platform-postgres-dev . \
+  --namespace data-dev \
+  --create-namespace \
+  --values values.yaml \
+  --values values-local-dev.yaml
+
+# Or use Argo CD (recommended for GitOps)
 ```
 
 **Important:** The CNPG operator must be deployed before any PostgreSQL clusters.
 
-### Changing Namespace
+### Using Argo CD (Recommended)
 
-To deploy to a different namespace, simply change one line in the environment's `kustomization.yaml`:
+For GitOps deployments, create Argo CD Applications pointing to:
+- Operator: `apps/platform/cnpg-operator`
+- Clusters: `apps/data/cnpg` with appropriate values files
 
-```yaml
-# Change this single line to deploy to a different namespace
-namespace: data-test  # Changed from data-dev
-```
+See `argocd/` directory for example Application manifests.
 
-Then update the Namespace resource patch to match:
+### Environment Selection
 
-```yaml
-patches:
-  - target:
-      kind: Namespace
-      name: data-system
-    patch: |-
-      - op: replace
-        path: /metadata/name
-        value: data-test  # Changed from data-dev
-```
+To deploy to different environments, use the corresponding values file:
+- **Local dev:** `values-local-dev.yaml`
+- **Local QA:** `values-local-qa.yaml`
+- **Local prod:** `values-local-prod.yaml`
+- **Cloud dev:** `values-cloud-dev.yaml`
+- **Cloud QA:** `values-cloud-qa.yaml`
+- **Cloud prod:** `values-cloud-prod.yaml`
+
+Each values file configures the appropriate namespace, resources, and storage class.

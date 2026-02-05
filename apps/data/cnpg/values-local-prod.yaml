@@ -1,0 +1,59 @@
+# Local Production Environment Configuration
+# Namespace: data-prod
+# Deployment: local k3s cluster with Longhorn storage
+
+cluster:
+  # Three instances for full HA
+  instances: 3
+  
+  # Storage configuration for Longhorn
+  storage:
+    size: 50Gi
+    storageClass: longhorn
+  
+  # Production resources
+  resources:
+    requests:
+      cpu: "1"
+      memory: "2Gi"
+    limits:
+      cpu: "4"
+      memory: "8Gi"
+  
+  # Anti-affinity configuration
+  affinity:
+    enablePodAntiAffinity: true
+    topologyKey: kubernetes.io/hostname
+    podAntiAffinityType: preferred
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          preference:
+            matchExpressions:
+              - key: workload
+                operator: In
+                values:
+                  - db
+  
+  # Environment labels
+  labels:
+    app.kubernetes.io/part-of: data-platform
+    environment: prod
+    deployment: local
+  
+  # PostgreSQL tuning for production
+  postgresql:
+    parameters:
+      max_connections: "200"
+      shared_buffers: "512MB"
+      effective_cache_size: "1536MB"
+      maintenance_work_mem: "128MB"
+      work_mem: "2621kB"
+  
+  # Enable monitoring for production
+  monitoring:
+    enabled: false
+    podMonitorEnabled: false
+    # Uncomment when Prometheus is available:
+    # enabled: true
+    # podMonitorEnabled: true
