@@ -48,3 +48,15 @@ cluster:
       effective_cache_size: "512MB"
       maintenance_work_mem: "32MB"
       work_mem: "1310kB"
+
+# SealedSecret configuration for local dev
+# IMPORTANT: Replace these placeholder values with actual encrypted secrets
+# To encrypt a secret:
+#   echo -n "your-value" | kubeseal --raw --from-file=/dev/stdin --namespace data-dev --name platform-postgres-app
+sealedSecret:
+  enabled: true
+  name: platform-postgres-app
+  encryptedData:
+    # Replace with actual encrypted values using kubeseal
+    username: "REPLACE_WITH_ENCRYPTED_USERNAME"
+    password: "REPLACE_WITH_ENCRYPTED_PASSWORD"

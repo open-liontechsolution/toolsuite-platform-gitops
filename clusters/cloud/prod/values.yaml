@@ -48,10 +48,22 @@ cluster:
     parameters:
       max_connections: "300"
       shared_buffers: "1GB"
-      effective_cache_size: "3GB"
+      effective_cache_size: "4GB"
       maintenance_work_mem: "256MB"
       work_mem: "3495kB"
       max_wal_size: "8GB"
+  
+  # SealedSecret configuration for cloud prod
+  # IMPORTANT: Replace these placeholder values with actual encrypted secrets
+  # To encrypt a secret:
+  #   echo -n "your-value" | kubeseal --raw --from-file=/dev/stdin --namespace data-prod --name platform-postgres-app
+  sealedSecret:
+    enabled: true
+    name: platform-postgres-app
+    encryptedData:
+      # Replace with actual encrypted values using kubeseal
+      username: "REPLACE_WITH_ENCRYPTED_USERNAME"
+      password: "REPLACE_WITH_ENCRYPTED_PASSWORD"
   
   # Enable monitoring for production
   monitoring:

@@ -119,3 +119,15 @@ type: ClusterIP
 
 # Additional configurations
 mode: standalone
+
+# SealedSecret configuration
+# This creates a SealedSecret that will be unsealed by the sealed-secrets controller
+# The encrypted values must be obtained using kubeseal
+sealedSecret:
+  enabled: false  # Set to true in environment-specific values
+  name: platform-postgres-app
+  encryptedData:
+    # These values must be encrypted using kubeseal
+    # Example: echo -n "platform" | kubeseal --raw --from-file=/dev/stdin --namespace data-dev --name platform-postgres-app
+    username: ""  # Encrypted username (set in environment values)
+    password: ""  # Encrypted password (set in environment values)

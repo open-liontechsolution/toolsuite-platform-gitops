@@ -125,15 +125,30 @@ This allows multiple environments to coexist in the same cluster if needed, with
 
 ### Secrets Management
 
-Each environment must have its own sealed secret:
+Secrets are managed through Helm values files using Bitnami Sealed Secrets:
 
-1. Copy the example: `cp clusters/local/dev/secrets/secret-app.example.yaml clusters/local/dev/secrets/secret-app.yaml`
-2. Edit and set a strong password
-3. Encrypt: `kubeseal --format=yaml --namespace data-dev < clusters/local/dev/secrets/secret-app.yaml > clusters/local/dev/secrets/sealedsecret-app.yaml`
-4. Apply the sealed secret: `kubectl apply -f clusters/local/dev/secrets/sealedsecret-app.yaml`
-5. Delete the plain secret file: `rm clusters/local/dev/secrets/secret-app.yaml`
+1. **Encrypt your secrets** using kubeseal:
+   ```bash
+   echo -n "your-password" | kubeseal --raw \
+     --from-file=/dev/stdin \
+     --namespace data-dev \
+     --name platform-postgres-app
+   ```
 
-See individual environment READMEs for detailed instructions
+2. **Add encrypted values** to environment's `values.yaml`:
+   ```yaml
+   sealedSecret:
+     enabled: true
+     encryptedData:
+       username: "AgA..."  # Encrypted value
+       password: "AgB..."  # Encrypted value
+   ```
+
+3. **Commit to Git** - Encrypted values are safe to commit
+
+4. **Deploy via Argo CD** - Secrets are automatically created with the cluster
+
+See `docs/SEALED-SECRETS-GUIDE.md` for detailed instructions and troubleshooting.
 
 ## Deployment Order
 
@@ -154,25 +169,37 @@ helm upgrade --install cnpg-operator . \
 kubectl get pods -n cnpg-system
 ```
 
-### 2. Create Application Secrets
+### 2. Encrypt and Configure Secrets
+
+Secrets are now managed through Helm values files. Encrypt your secrets and add them to the environment's values file:
 
 ```bash
-# For each environment, create and seal the secret
-cd clusters/local/dev
-cp secrets/secret-app.example.yaml secrets/secret-app.yaml
-# Edit secrets/secret-app.yaml and set a strong password
+# Encrypt username
+echo -n "platform" | kubeseal --raw \
+  --from-file=/dev/stdin \
+  --namespace data-dev \
+  --name platform-postgres-app
 
-# Encrypt with kubeseal
-kubeseal --format=yaml --namespace data-dev \
-  < secrets/secret-app.yaml \
-  > secrets/sealedsecret-app.yaml
+# Encrypt password
+echo -n "your-strong-password" | kubeseal --raw \
+  --from-file=/dev/stdin \
+  --namespace data-dev \
+  --name platform-postgres-app
 
-# Apply the sealed secret
-kubectl apply -f secrets/sealedsecret-app.yaml
+# Update clusters/local/dev/values.yaml with the encrypted values:
+# sealedSecret:
+#   enabled: true
+#   encryptedData:
+#     username: "AgA..."  # Your encrypted username
+#     password: "AgB..."  # Your encrypted password
 
-# Delete the plain secret
-rm secrets/secret-app.yaml
+# Commit to Git
+git add clusters/local/dev/values.yaml
+git commit -m "Add encrypted secrets for local dev"
+git push
 ```
+
+See `docs/SEALED-SECRETS-GUIDE.md` for detailed instructions.
 
 ### 3. Deploy PostgreSQL Clusters
 
@@ -181,7 +208,7 @@ rm secrets/secret-app.yaml
 cd apps/data/cnpg
 helm dependency update
 
-# Deploy to your chosen environment
+# Deploy to your chosen environment (includes secrets)
 # Local dev example:
 helm upgrade --install platform-postgres-dev . \
   --namespace data-dev \
@@ -189,7 +216,11 @@ helm upgrade --install platform-postgres-dev . \
   --values values.yaml \
   --values ../../clusters/local/dev/values.yaml
 
+# The deployment will create both the cluster and the SealedSecret
+# The sealed-secrets controller will automatically unseal it
+
 # Or use Argo CD (recommended for GitOps)
+kubectl apply -f argocd/clusters/local/cnpg-cluster-dev.yaml
 ```
 
 **Important:** The CNPG operator must be deployed before any PostgreSQL clusters.
