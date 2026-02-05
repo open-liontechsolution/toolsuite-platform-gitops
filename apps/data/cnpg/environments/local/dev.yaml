@@ -2,7 +2,16 @@
 # Namespace: data-dev
 # Deployment: local k3s cluster with Longhorn storage
 
+# Chart mode
+mode: standalone
+
 cluster:
+  # Cluster name
+  name: platform-postgres-dev
+
+  # PostgreSQL image
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.4
+
   # Single instance for development
   instances: 1
   
@@ -39,6 +48,17 @@ cluster:
     app.kubernetes.io/part-of: data-platform
     environment: dev
     deployment: local
+  
+    # Bootstrap configuration
+  bootstrap:
+    initdb:
+      database: platform
+      owner: platform
+      secret:
+        name: platform-postgres-app
+  
+  # Primary update strategy
+  primaryUpdateStrategy: unsupervised
   
   # PostgreSQL tuning for dev
   postgresql:
