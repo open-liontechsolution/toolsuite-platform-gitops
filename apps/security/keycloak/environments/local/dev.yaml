@@ -12,7 +12,7 @@ keycloak:
     existingSecret: "keycloak-admin-credentials"
     passwordSecretKey: "admin-password"
 
-  production: true
+  production: false
 
   postgresql:
     enabled: false
