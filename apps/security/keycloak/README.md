@@ -349,6 +349,7 @@ Common issues:
 - Database connection failed: Check NetworkPolicy and database credentials
 - Secret not found: Verify SealedSecrets were created and unsealed
 - Image pull errors: Check image availability
+  - Override the image tag in `values.yaml` if Bitnami removes a revision (for example, update `keycloak.image.tag` to the latest `*-debian-12-rN` tag).
 
 ### Database Connection Issues
 
