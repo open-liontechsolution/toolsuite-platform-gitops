@@ -1,0 +1,27 @@
+apiVersion: v2
+name: keycloak
+description: Keycloak - High performance identity and access management solution
+type: application
+version: 1.0.0
+appVersion: "26.3.3"
+
+dependencies:
+  - name: keycloak
+    version: "25.3.0"
+    repository: https://charts.bitnami.com/bitnami
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+keywords:
+  - keycloak
+  - identity
+  - authentication
+  - sso
+  - iam
+  - access-management
+
+home: https://www.keycloak.org
+sources:
+  - https://github.com/keycloak/keycloak

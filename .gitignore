@@ -1,3 +1,4 @@
-secret-app.yaml
+secret-app*.yaml
+!secret-app.example.yaml
 Chart.lock
 charts/

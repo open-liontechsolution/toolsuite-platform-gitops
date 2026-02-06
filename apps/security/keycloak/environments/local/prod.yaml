@@ -1,0 +1,72 @@
+# Local Production Environment Configuration
+# Namespace: security-prod
+# Deployment: local k3s cluster with Longhorn storage
+
+keycloak:
+  fullnameOverride: keycloak-prod
+
+  replicaCount: 2
+
+  auth:
+    adminUser: admin
+    existingSecret: "keycloak-admin-credentials"
+    passwordSecretKey: "admin-password"
+
+  production: true
+
+  postgresql:
+    enabled: false
+
+  externalDatabase:
+    host: "platform-postgres-prod-rw.data-prod.svc.cluster.local"
+    port: 5432
+    database: "keycloak_prod"
+    existingSecret: "keycloak-db-credentials"
+    existingSecretUserKey: "db-user"
+    existingSecretPasswordKey: "db-password"
+    namespace: "data-prod"
+
+  service:
+    type: ClusterIP
+
+  ingress:
+    enabled: false
+
+  resources:
+    requests:
+      cpu: "1"
+      memory: "2Gi"
+    limits:
+      cpu: "4"
+      memory: "8Gi"
+
+  podLabels:
+    app.kubernetes.io/part-of: security-platform
+    environment: prod
+    deployment: local
+
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: keycloak
+          topologyKey: kubernetes.io/hostname
+
+  persistence:
+    storageClass: "longhorn"
+
+sealedSecret:
+  enabled: true
+  dbCredentials:
+    name: keycloak-db-credentials
+    encryptedData:
+      db-user: "REPLACE_WITH_ENCRYPTED_USERNAME"
+      db-password: "REPLACE_WITH_ENCRYPTED_PASSWORD"
+  adminCredentials:
+    name: keycloak-admin-credentials
+    encryptedData:
+      admin-password: "REPLACE_WITH_ENCRYPTED_ADMIN_PASSWORD"
+
+networkPolicy:
+  enabled: true

@@ -1,0 +1,61 @@
+keycloak:
+  nameOverride: ""
+  fullnameOverride: ""
+
+  replicaCount: 1
+
+  auth:
+    adminUser: admin
+    existingSecret: "keycloak-admin-credentials"
+    passwordSecretKey: "admin-password"
+
+  production: true
+
+  postgresql:
+    enabled: false
+
+  externalDatabase:
+    host: ""
+    port: 5432
+    database: ""
+    existingSecret: "keycloak-db-credentials"
+    existingSecretUserKey: "db-user"
+    existingSecretPasswordKey: "db-password"
+    namespace: ""
+
+  service:
+    type: ClusterIP
+    http:
+      enabled: true
+
+  ingress:
+    enabled: false
+
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "2Gi"
+
+  affinity: {}
+
+  podLabels: {}
+
+  extraEnvVars: []
+
+sealedSecret:
+  enabled: false
+  dbCredentials:
+    name: keycloak-db-credentials
+    encryptedData:
+      db-user: ""
+      db-password: ""
+  adminCredentials:
+    name: keycloak-admin-credentials
+    encryptedData:
+      admin-password: ""
+
+networkPolicy:
+  enabled: false
