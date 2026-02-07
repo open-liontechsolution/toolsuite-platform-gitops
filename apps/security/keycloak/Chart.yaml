@@ -3,11 +3,11 @@ name: keycloak
 description: Keycloak - High performance identity and access management solution
 type: application
 version: 1.0.0
-# appVersion: "26.3.3"
+appVersion: "26.3.3"
 
 dependencies:
   - name: keycloak
-    version: "24.7.3"
+    version: "25.2.0"
     repository: oci://registry-1.docker.io/bitnamicharts
 
 maintainers:
