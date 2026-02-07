@@ -7,7 +7,7 @@ keycloak:
   # image:
   #   registry: docker.io
   #   repository: bitnami/keycloak
-  #   tag: 24.7.3-debian-12-r6
+  #   tag: 26.3.3-debian-12-r0
   #   pullPolicy: IfNotPresent
 
   auth:
@@ -15,7 +15,7 @@ keycloak:
     existingSecret: "keycloak-admin-credentials"
     passwordSecretKey: "admin-password"
 
-  production: true
+  production: false
 
   postgresql:
     enabled: false
