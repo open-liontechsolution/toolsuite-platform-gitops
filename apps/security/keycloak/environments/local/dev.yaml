@@ -91,6 +91,7 @@ keycloakx:
         KC_METRICS_ENABLED: "false"
         KC_HTTP_ENABLED: "true"
         KC_HOSTNAME_STRICT: "false"
+        KC_DB_SCHEMA: keycloak
         JAVA_OPTS_APPEND: "-Djgroups.dns.query=keycloak-dev-headless"
 
 # Consolidated SealedSecret with all Keycloak configuration
