@@ -1,37 +1,28 @@
 # Local Development Environment Configuration
 # Namespace: security-dev
 # Deployment: local k3s cluster with Longhorn storage
+# Codecentric Keycloakx Chart
 
-keycloak:
+keycloakx:
   fullnameOverride: keycloak-dev
 
-  replicaCount: 1
+  # Single replica for dev
+  replicas: 1
 
-  auth:
-    adminUser: admin
-    existingSecret: "keycloak-admin-credentials"
-    passwordSecretKey: "admin-password"
+  # Inject all configuration from consolidated secret
+  extraEnvFrom: |
+    - secretRef:
+        name: keycloak-credentials
 
-  production: false
-
-  postgresql:
-    enabled: false
-
-  externalDatabase:
-    host: "platform-postgres-dev-rw.data-dev.svc.cluster.local"
-    port: 5432
-    database: "keycloak_dev"
-    existingSecret: "keycloak-db-credentials"
-    existingSecretUserKey: "db-user"
-    existingSecretPasswordKey: "db-password"
-    namespace: "data-dev"
-
+  # Service configuration
   service:
     type: ClusterIP
 
+  # Ingress disabled for dev
   ingress:
     enabled: false
 
+  # Dev resource limits
   resources:
     requests:
       cpu: "250m"
@@ -40,35 +31,53 @@ keycloak:
       cpu: "1"
       memory: "2Gi"
 
+  # Pod labels for dev environment
   podLabels:
     app.kubernetes.io/part-of: security-platform
     environment: dev
     deployment: local
 
-  affinity:
+  # Anti-affinity for pod distribution
+  affinity: |
     podAntiAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
         - weight: 100
           podAffinityTerm:
             labelSelector:
               matchLabels:
-                app.kubernetes.io/name: keycloak
+                {{- include "keycloak.selectorLabels" . | nindent 12 }}
             topologyKey: kubernetes.io/hostname
 
-  persistence:
-    storageClass: "longhorn"
+  # Persistent volume for Keycloak data
+  volumeClaimTemplates: |
+    - metadata:
+        name: keycloak-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: longhorn
+        resources:
+          requests:
+            storage: 5Gi
 
+# Consolidated SealedSecret with all Keycloak configuration
+# User will populate encrypted values using kubeseal
 sealedSecret:
   enabled: true
-  dbCredentials:
-    name: keycloak-db-credentials
-    encryptedData:
-      db-user: AgB4VwhfpQEuI1xQKXzzgZkWRfVrZSL9LlJ6cMpi7/GVQjwVcDOE7FRrN4Z82IWovcc5H/+t9tlSqXLf3497HQEVJeJ3/x4YAmWdaRr4tX/1sY948ywNSfK9cmymFgHPgyiP6ZKDFZsOLrYioPU6VShuSP8ONNeM2yyAX6Pd+G43fx53if2BMT/4QTNm9ltqfHDrq37UqHhC7P0/G2hwGUXA1EgeWRd4Y3XDqNY11UXm30nUC3HlY2GgTfmsrNgMQd2MxAkcYoAMMoDhMt6kVMS+TpfDu0Ghj+KxN4179pEPOE+/FxXkpnrMkx4bA8DVdoobfEggH8yTNJepdHmMDSrJLnxRnaMkG3CEpegksW53a7dcxEG1m8/wPPGvdSz6F3IFKs2Y+zCxKpgCCPyR8QlLCjZbL1u9C3+kzAuyK3OuCQclcaKP3HMGCjdsMsOqSXKMeNPr77h26so9o4ZBgdGLKx7/bH2fT+4KohHdrJiS3qA1rkICcsfaVaAwOrpwEnWLg68dj3d6280Iia7QW3B62E1HQ2ygwGg9jeEpZxBN63HjBkG41RxWZnDU0hOVrSVHOWT5WTCriCtunjix9nr6gQmIIlz4RZVQ16yJgnnk+q+UqeDyoVpHVNj3cl8LRD89fe+7aUoP+YH8Srp9oCQzTR+1FKwVp2EFsCN0kuCU3aeB2TfJ22x8PESu3Z1zgf3toj9g9bYYMR3tZvzEmyTDfH0aLw==
-      db-password: AgA3gj5vPvd9kyGFKo0FaANMK5tmaXsx2WQTkFWlK/nuvt+2hpRKCSHOT4fSwHotdbs0YqiHQWgdSK+nLt7pnLMwk1BxJ4tTtiJOAZbaTl/RHoA3J6fxTUxQ1Qbr+nvVJcnO8zTpJI6FfN+iKsK6QuBcmX+YTctig7F9C/bzXCP4EYih3H2+YVyq5YNw+7o2NNNxDYiQZrMAJd+MxU7fq7KIGzD+n9lOVXSzxGrD0wIGGbacUE36OlprYauV7/yRkpO7nutsTQcVJ8uUkHSFZCec7QkHqH5yH8X9kNJkFqEPxT78VjMXBgSjz3HM6DmcV9+XQv0MlQwMIH6R9RqremYUYH8JAl9atWCd5tqmmhpcYjt0i07GUMsRSedaxjbvdk3R1a4N77pDJLkjLCZ4pmmG06PqifijA19jLbwerXWCwdJ7Oa/iNvK64Zfucv0xCLqvtcokkoXj37APkpOISdGzwDcgT4/f00B7HPX7RhA66Ur/EQyh4QeKhi3Z7RCh44aQ0ZWGaxEj5img/2al474E2HIG0QJW9hU6K1yVJySRTEH3VzjypJa4vS/wDaL2RTh1PIeleNGZauviyIRLR5G4v6pwTX+8KpDxV+aVfRUpm1zVG/Y1FqNWO0BIo28cVn4OHlEvYbBGq7c78ZGIZkzovsT9WNboeZHbe9HiqK77mtQvqPwhLWEVOD0rBl+IjhtKumLEe8Jiggi1vNQ=
-  adminCredentials:
-    name: keycloak-admin-credentials
-    encryptedData:
-      admin-password: AgCO/XWV7FExrzo2XHz19PxNPiLjPCr573V83YTsdtqsp+7FkVHrshkaJSdZ5ywjc/JDdMdpAbv4vArjxt5hn/02F+hZWEYu7AK2cWL5s8fCyNPneMA3MbJ0PKG1CTkUWt0AHl+GdM16MOwEwAoH/n7tk4BWSUywRwpaTt4YTCD0Bh3VW46u9PE68qfkjVbBcAIlwwNbUjq68sofyKFmM2El9NEVe6XyzLOwUv7gMnxk2p+Rpyk/+wu6geqJuZO8RTNEKid1BnF7VVLdwPRnx48TkPDww191zi/xug8SVelGiTA6tD3IEGsVD9zR9kt803UOu9oRdVg7pVttP9zMqC57ev2uAD+xFR3+Ajgo/peFHnHyprPLPe78YUzyEdyhUJrt4GOFcyPCViWZsRhHQXUadQzbaYh0AuXEVg1jYgaWfnBA8sVZ5kpLLTvHM+l2kprMp5O21eq6Mf8D+T/IzFJFI2MoKsEHnMLfFSjlrxqQ3n3znZthVYOjhQaTrS5t0A08tsghxyVafEpMZYeVa+oF4zTZ+Oo0RfUuHjK/ExJoVeDghJrtaXQ62dJ5lGK14d0h84MFMg4UXjYIiB47f2cCnKEURXUvWzyq0Q1Gk+L7Mq/PINntQLV8J1bQj5Gmdme+sUvlF0un5dZFRPPXryTN+YuoazW0k0Th0epADvcO1c28Lc5IMFsnsCvyQq78Shkr0JBT07wvtfE2cz9xWsK67B6Ahg==
+  name: keycloak-credentials
+  encryptedData:
+    # Admin credentials
+    KEYCLOAK_ADMIN: "AgAOKP7GQpX3xuBVqNZOyZtU9Mi+JNWIE/9EB3qUG7f0LUz3491ECHvrSU8G22jIWVrtZFHu91D2oljkYur1nHYmspPywv8/ELtE43hZBrdAzFxCDRqpHYfhqmX1iswRnSFb9wUqZIJhJfLU2HGWniCwEdld7ltl2KDn7HVewgtDitJiNzv3PkLw2TeQWVHKFQ7ACnHJ2rsEvo3GiAx4J4VljfZra+aHkBSTeLDK3QWBwp2n2YZBaHY0yzqQYPduMoCFRSmqkuJ857/kX7uumXsiKUZ3PkmJHtpgSHaKm6J7kEsuj2kB9OP6zPCXJpSDCJ6bxTynqSQ8EE4RUQZOsRz26vl4a7CWaiX66BPWBqye4g5bS6mJNBLx8dXuX+68hH1egS3x5toBw5VDbp+Lsmyw7tYnGByu5jslROBNTZ11bpow3NFmvVYKpPaxeFyMDyQO194UvvnzrDEwpy8PZ3zqKaP0LNJwkDdHMID71XpUFUisptRuxCppFTo8oU8Lo1QaRY3nooqrM+rIGq8Owgz6JAeGHCLm8e+XvohO/IGzh2yu13hYch4ZeRnW4igJHiX4bQnk9tLJ6us0/YNfjnrAQbsJaRnr50CZrR4KUVOQe20S3dXIbCEHfbRLKlIIo0Ufuf8f1oEs/0xoMbqgQ75vVOHf8pldImcyGk6v/1AbP8cMMNg7RlULQUtqjCLRcqy2ibgP2Q=="
+    KEYCLOAK_ADMIN_PASSWORD: "AgB44X6Zxd8cSz5xMT2AonKEcVHnPPrkR7Y5ioxJo4lmt41JVQCT3uCo5c44Q/51k1k1GF/FvDK3lAuqJOThVyQKGeyEKVgdoiXY3kvoHMjyXPkddFPzxTwrYJwF9XRfWCfFk4rNPGWDGcvDhfUOYpxVwP+nDq8ywzTHJz9/qz96rmLcx/lFb2bkcre0oqqjGnQQoCcd0UNchost5KJfH+dchO+eSfB2pBmKZCBoPQYveH5LdvaxZkX37uZ0lId1VWoDeACFqKIVAstpCnKEcae9zHG/i74/rIEPKxAQr54MHsCx+AVYvQiNEsMS4OeAAZSiFL1FG0vIcvh4ZTtcT55o3qXxKUURTgbhYBf3LRoX0RbzwHxhCIrRabe/wSnUnGt62aYelz6JjbAJ/AlDbzC6noQh+XaxaXXOutlq1tLnHtthj4+V3WTjlTO0gwlhi9NUnRWu742NJgmRKWm8PBxfbQ9+cOLJL+sIap6dQ764XazQMTxKrbIIRc901E5glgy5a4xTXjOqeeTP8goCQLxdmBKFVKu6pXNexqYBnmv8lZpmTIyugGMlkavGlZHJ7pvkfFyhlUDQq1sY7Wcx734ZRzhHM56dodaHPgCX6BLQaaZ//EkrqYQPjKMXpaxfxk1elJ/wT2abO/ken9pvj8T3EiJ97AmNeyHQ1B2QukGycV2yMldV+Qs5WkXmk33iQlxQEu1yXj2ukDRIslrKMh7b3Z9MzQ=="
+    # Database configuration
+    KC_DB: "AgAu3Qedo5uinTinNg8h2mKupuCr1C2oGeb269I4thMwhbIWX5+YfngIrxuGrOJ1Fg83jpjeADNlwZ61daGdgq0YLSQnI5++/BKGAcsipbFV1pc+OQmvlXuq5dRQZ1NM9CrBt2Cs9AqK+eB3hpAWOQ1cWdQFeht+cRN4iviJRn/+NKFpF8L7Q54cx7/2yOOslAf6++u6uvONPra95ViX79NuS7kISvP7FfZ+3ya+/T1j8gicaXzceEvuixb4KbT+RUSVTotz4viccs9zyqVIKyU+K70diZNDnGXafftMrT6yQkc6L881Q2Lzzkz61HWMGnspQy1Tx77yXMxL8pJHkgk9gtR/iejd/RmovOYtxU3lA3qjJGDRcLhJguDhbAdOK6CsWy7GT6AxnFlFADHYzmK1WyZHJjD5FpguhK0ieSC2CxoRNJ//6xFOkQ0JK9YXb2mE2rvnoxO2QNoaMrIcIg8RdS4NnGOJLdy7OpqwEBzvhU2nXXbCOCU+EXLt0RXJiVCaP8MfD0ZqvERvW8FuQQ8n//R+cV4IO9dqohEQsUxvRTTGKO3sEJKC7d1qpdWSfhAUFYOJkswDteJmN/BXGTptYwLqY8M5x2VlohIAVgLv2kEl6T2umAVnP9eu0sWtn66VJkMG+EZJzbn74HpOopoYAXze2IonNjNwZYC215vCHhaUFRNC+aQOvSdKPMEitUgx8gCmzSA+gQ=="
+    KC_DB_USERNAME: "AgAaoVlQe6y+Tz5S6uFygE+xj/z/snaJnZD9Lh0bMDOmkaAwBfb2YfSV4ndrp5DyYUwYJTIZwHanPicK2/JWrwErU46Dm9pQjtHdNpAlxXEQMxdPFznNsHDGOzQmxEJ8X8evCH8HZkJy5PwZ8v0N1+CpzW1v+nOH8i3PvhgmCEqZqsr6T+yS32Ip+8KCFji6E37jsl5aZsiw8QUcd7cJ+2jcAV74AfiOI9LJ7jd+upQWNJ7xK28YiJSK6z9y0Licyu3R/TBqtXcL8Sdz4IucR0SI2Noo2THhk52hhFSTMMLs/mvQ8A2ez0f2VbfQl9gd2YrM2KbM4XVTj22fK+wbYQVerJD3RQLFXH5FpRGq4THGz3OHsRNmqm+klhyKZrlhIOQL+6z6Gxdef+iZ9tXRwzBujHz33KiUvzRLM84JbflzyjXlaYMUASLRmcmLDmhRVMVDoyTiOMebJ0wyiwOiriAQBzg4Hrhbj09+As/QuaftZThjelX4h/jBv+VWQ/Xdr6ypk1LcpMDOEJLw+p/gDnRMq82pKTaLvoaf301Oq0kMERDQrZenKUnuDqJynMTPImbJLTvNh7NXFn06LKx3OQoafes0k+amvXMcDQb3H4IuorCtdNoRA/XPHuFzs2h66Sp8U1e1oC9+kow6YfFgW6AMAUEU0n33JGZtcuDkBBhRZLTgKYRdXTC8qH+ZVxUebmIE+fW1Rpro5DWLn2A="
+    KC_DB_PASSWORD: "AgAmri1LVaiwTACkC4G9FNqiBZqxRPySDT3+eks+LSdiAlWrlm/3cUrqx+WLA6X9aH9tKZgXdkjXj0g5q6UmtPleA4r4LASC23n9EUr+ZH/R0ZuBiftpll8+28sTBegFAKTkpZngdKwOQzTQsGSV4cnl7wqG9Q9+QGBw3+YXSulcjtC+tmf43lK1OvzU0Wjt1FRC33uPypaakhDtkGrhVXf25OReJFalx0EcuQhheG9/RWQIzVF0tOyrFJkdE0PpZe3ckbxmLtJ3OtnovFdXKMHWM+h9ugSFXsnpjDE0+LQWJfy3aTZ47hEKnQfxpQH+Mb5ZvoXal2R799Fl2xvdz0QkYgEVDe0/R9l5X4VUsTu9dwSbmvHaMQJ6SPgHqHQXPwzbFCnGMz192OstVKuUTRwfV4bjO1jsornsBvQ28XNlxu3PV5a+sJxE1eYSUWRdp0fRIZjea6OY8NHC9+avSl6hRd06IoIG7lGYovB1gPPaxkbKa4g77TiXDRwdfQ+ZB7Ox2UxdAZhs3PB+6ediIPKIRUC8592rhLd9trDkavsIdVJBgj5ymzMKCEWhLrrHDVOh2tgyAAW2TqoOcD5FOucFvUQcXqCtxc+Lr5yKXkw2qycbFv/ZWa1Ltg+PT7qKEIIdT7d/Q9dkt8Od0Ny+8Vj1PAlt4lT2hsFXOew6qGRttIHulgFRWBmlCDA6ltmHhN7/uYlyVckdVWtlquH3ka/Iegta/A=="
+    KC_DB_URL_HOST: "AgBaCmcc/U0M/4BYSf09xv5AvZlqhgciFuBXAgyufeUc7erAEjwO048sV6rDA4U443DSY+izN73R2qTH1zTQo1+ued5JRD0gnVgyg16e1HVXFKWI3RZFZ2A5+ubEPoqv1cMcW3FokcHAy4gIAqqNwF3biiSJorWM2+ru/tWMz2Ir3B7LqEH7+CKNyXi2mQCqpvgU1/ow6n3LowHvKIUwFsrNL8NwjnWu8sLKoZiLcq4/+fapAPnMehOVyS4MFJF5+MEq1leVxmLq/5VR9VPaljz1eUMgTF7UtnppGwPzOnFiXywFbqbxPZo1CND+sMNrlWqDcN2/vQOWalqP8fFTQeAIfOY9Zi6bX4vJCMPNc98Z7z/QTXtLWGOQiyYBK/iQhFG6n6XyJgddelaemnYAbYdFSDKrrZJx++jnN9tNGXHEz6aHHqzL1up/uvwJgXXjDJUpdb5dxdoN5GxugyrhNhrTM32eaDw32KUWs8v0KCef8PNjmGnAtOtv7rnFdwMvYdb0y8RrfWJlOeyIeKeDMrGsALzwWpKRexZioWzJivfDvgJ0Q33yWWfxQnMpAQKFyxUZOGWmGomy7p9x4BsIun+sgM9+8k/3FLNrwjzVuauTRS8FTHjzo4kyFxpdz7VXWB7IdHG5SEfJO2LbbktvcQf/UqvLcSK5ZNpCnMIqsSTYhfum67zXPa4F//z/mkXlxVwrChQPCZv2HdBTmjlBnvth6/xw5s/dcBbGHIAefJgYxNaRXV1Y7i6igQOht+wKId4VOrY="
+    KC_DB_URL_PORT: "AgCG6Ugrl5O/HomIS5FHGlj7S8rifwC/FtbYXalt95bkpU+ObqC0cH2/j0jM14lpu1iCUZenRe3RwFzj1xVlX0l7JUJXalz0tXL3BdCVjatLCIpTUx+x9/ELkyHOJaRYbQdu75fDk3UpURHcR622JdMu1My/F9uaXlgPQKRQr8i0v7A4o60tF/3xT/mj/S1u+uV7mkL4afHgOHzx7SAZziHWFmKEIEoEB2aYWpJeZXLtdY+J6nafFPFntM+AAJtvxliVrZBXOSR1Mvo8MzQKwMmxbw1IdXFIa7eZmo9Y3JBQOsBonL5KWJ920mTvGcuXjSAGM8UGKx4QAvyuM6MM8udOnkaazOAl6rd1uMkGCAYcm2HVh0JHXr4r+0smylbMl9cDNIfLGTWKIA8mpBG3QCLxfttabN0vcn7iuA6bIC7hO7H7nvqPD0cuj33szraPrxvJWVNjKEKskNhBtUziStcaf5/JgsR7QEfZKoqtdzLQzSd33ItVh0NiRSm9leiip1N6iGbfHHEY2q8VDkBH+qXLNLBb3daulEnJrig8MnsqNe3sCR3eC9bAT5g26Jxb4a5aCVSmwYSeX3104micU659eLW/QGz2WCOP91WehXVajaybOp/OnE8wdCsSf+pdx9GIynB5HCI30hHGNbQHoyvg/rrKKx2pQNf0muE9l9OhaVDYIEOf0h/kPiE7PoZ+H9Wx8ZeR"
+    KC_DB_URL_DATABASE: "AgAZIXFGd3sTkN17pFciaaz9Fjm7eMFkRmpnhlS11rJA1Ng9BPtQLfAkiaAJWyQIGx/loZKaPRaEReiexZWNFR7IKD6iGOTYYTDz03qKiEbuhZep85bAxTqRFMWKCxTtHJ4nwzHSu2uuPmu2OCFksWFRNm3lL1zzxV7ZwzN7UiVEBdRFUcd28fzgTtSber0uCCf0Bc+0E0PK8KAC9Rs6j+3JpZ1Qeog/Xx+Lpc6PeVDa1tFcl1DqW3LjAl/9boIezpewIE4sEFrKQadGA5jWpXFPT+dynkMnA2Yuj6K9dSv8AoELTk6dlshl22G+N3qq0R/Z/IG9HhqgjGbUBKJwLftD6+t0/BXhFgCBjCk535uKq2rvTgAh2/EVjs7rId2eHBq7dtKET5e0m2TjMQA/7OfFbXkhgTUWOtQS5m9fMEu2vvrwGUW21GLeoMZrXNxhuYqn+7cT9+hNQxl0wuEnLE/HSzE/P0MJeGfSUxxY909nYkMwHcaFVU6OdQIzZotziqUSxH4G4mo9EtAQK81fWmCLYbZLfdGSuSO8b3D1gvuz++1eLGZX7xyBLAWXXnaogUuvgMnj3Bwn3rHiAV5bUhDWwW/pgBzTpQSV+ww7+jbcO/YwPcvwwsGxeR9j8QL3nG0eutmhjraj1F07CBpYNp3CuycuNEXPChYxbNRdUXVbsHcLmVmmLEoTLioO5ftJO27h+zqydF7sJUdyTGk="
 
+# NetworkPolicy for cross-namespace database connectivity
 networkPolicy:
   enabled: true
+  databaseNamespace: "data-dev"

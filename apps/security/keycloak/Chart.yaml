@@ -1,20 +1,23 @@
 apiVersion: v2
-name: keycloak
-description: Keycloak - High performance identity and access management solution
+name: keycloakx
+description: Keycloak.X - Open Source Identity and Access Management for Modern Applications and Services
 type: application
-version: 25.2.0
-appVersion: "26.3.3"
+version: 7.1.7
+appVersion: "26.5.1"
 
 dependencies:
-  - name: keycloak
-    version: "25.2.0"
-    repository: https://charts.bitnami.com/bitnami
+  - name: keycloakx
+    version: "7.1.7"
+    repository: https://codecentric.github.io/helm-charts
 
 keywords:
-  - keycloak
-  - identity
-  - authentication
   - sso
-  - iam
-  - access-management
+  - idm
+  - openid connect
+  - saml
+  - kerberos
+  - oauth
+  - ldap
+  - keycloakx
+  - quarkus
 

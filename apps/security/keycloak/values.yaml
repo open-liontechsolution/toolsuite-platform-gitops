@@ -1,42 +1,38 @@
-keycloak:
+# Codecentric Keycloakx Configuration
+# Base values for all environments
+
+keycloakx:
   nameOverride: ""
   fullnameOverride: ""
 
-  replicaCount: 1
+  # Number of replicas
+  replicas: 1
 
-  # image:
-  #   registry: docker.io
-  #   repository: bitnami/keycloak
-  #   tag: 26.3.3-debian-12-r0
-  #   pullPolicy: IfNotPresent
+  # Image configuration (uses official Keycloak image)
+  image:
+    repository: quay.io/keycloak/keycloak
+    tag: "26.5.1"
+    pullPolicy: IfNotPresent
 
-  auth:
-    adminUser: admin
-    existingSecret: "keycloak-admin-credentials"
-    passwordSecretKey: "admin-password"
+  # Inject environment variables from secret
+  # The secret contains all Keycloak configuration including admin and database credentials
+  extraEnvFrom: ""
+  # Example:
+  # extraEnvFrom: |
+  #   - secretRef:
+  #       name: keycloak-credentials
 
-  production: false
-
-  postgresql:
-    enabled: false
-
-  externalDatabase:
-    host: ""
-    port: 5432
-    database: ""
-    existingSecret: "keycloak-db-credentials"
-    existingSecretUserKey: "db-user"
-    existingSecretPasswordKey: "db-password"
-    namespace: ""
-
+  # Service configuration
   service:
     type: ClusterIP
-    http:
-      enabled: true
+    httpPort: 80
+    httpsPort: 8443
 
+  # Ingress configuration
   ingress:
     enabled: false
 
+  # Resource limits and requests
   resources:
     requests:
       cpu: "250m"
@@ -45,23 +41,43 @@ keycloak:
       cpu: "1"
       memory: "2Gi"
 
-  affinity: {}
+  # Pod affinity rules
+  affinity: |
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                {{- include "keycloak.selectorLabels" . | nindent 12 }}
+            topologyKey: kubernetes.io/hostname
 
+  # Additional pod labels
   podLabels: {}
 
-  extraEnvVars: []
+  # HTTP configuration
+  http:
+    relativePath: "/"
 
+# SealedSecret configuration
+# When enabled, creates a consolidated SealedSecret with all Keycloak credentials
 sealedSecret:
   enabled: false
-  dbCredentials:
-    name: keycloak-db-credentials
-    encryptedData:
-      db-user: ""
-      db-password: ""
-  adminCredentials:
-    name: keycloak-admin-credentials
-    encryptedData:
-      admin-password: ""
+  name: keycloak-credentials
+  encryptedData:
+    # Admin credentials
+    KEYCLOAK_ADMIN: ""
+    KEYCLOAK_ADMIN_PASSWORD: ""
+    # Database configuration
+    KC_DB: ""
+    KC_DB_USERNAME: ""
+    KC_DB_PASSWORD: ""
+    KC_DB_URL_HOST: ""
+    KC_DB_URL_PORT: ""
+    KC_DB_URL_DATABASE: ""
 
+# NetworkPolicy configuration
 networkPolicy:
   enabled: false
+  # Database namespace for cross-namespace connectivity
+  databaseNamespace: ""
