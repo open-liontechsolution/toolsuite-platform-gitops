@@ -14,7 +14,8 @@ keycloakx:
     - "/opt/keycloak/bin/kc.sh"
   args:
     - "start"
-    #- "--optimized"
+    - "--hostname-strict=false"
+    - "--proxy-headers=xforwarded"
 
   # Inject configuration from Secret and ConfigMap
   extraEnvFrom: |
@@ -69,6 +70,11 @@ keycloakx:
           requests:
             storage: 5Gi
 
+  # Mount the persistent volume to Keycloak data directory
+  extraVolumeMounts: |
+    - name: keycloak-data
+      mountPath: /opt/keycloak/data
+
   # Extra Kubernetes manifests to deploy
   extraManifests:
     - |
@@ -85,7 +91,6 @@ keycloakx:
         KC_METRICS_ENABLED: "false"
         KC_HTTP_ENABLED: "true"
         KC_HOSTNAME_STRICT: "false"
-        KC_PROXY: "none"
         JAVA_OPTS_APPEND: "-Djgroups.dns.query=keycloak-dev-headless"
 
 # Consolidated SealedSecret with all Keycloak configuration
