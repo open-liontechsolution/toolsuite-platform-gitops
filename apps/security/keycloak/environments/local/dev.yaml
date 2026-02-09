@@ -14,7 +14,7 @@ keycloakx:
     - "/opt/keycloak/bin/kc.sh"
   args:
     - "start"
-    - "--optimized"
+    #- "--optimized"
 
   # Inject configuration from Secret and ConfigMap
   extraEnvFrom: |
