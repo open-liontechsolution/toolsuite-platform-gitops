@@ -12,7 +12,7 @@ keycloakx:
   # Inject all configuration from consolidated secret
   extraEnvFrom: |
     - secretRef:
-        name: keycloak-credentials
+        name: keycloak-admin-credentials
 
   # Service configuration
   service:
