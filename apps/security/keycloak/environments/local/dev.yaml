@@ -59,7 +59,6 @@ keycloakx:
 
   # Persistent volume for Keycloak data
   volumeClaimTemplates: |
-
     - metadata:
         name: keycloak-data
       spec:
@@ -69,6 +68,25 @@ keycloakx:
         resources:
           requests:
             storage: 5Gi
+
+  # Extra Kubernetes manifests to deploy
+  extraManifests:
+    - |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: keycloak-config
+        namespace: {{ .Release.Namespace }}
+        labels:
+          app.kubernetes.io/name: {{ include "keycloak.name" . }}
+          app.kubernetes.io/instance: {{ .Release.Name }}
+      data:
+        KC_HEALTH_ENABLED: "true"
+        KC_METRICS_ENABLED: "false"
+        KC_HTTP_ENABLED: "true"
+        KC_HOSTNAME_STRICT: "false"
+        KC_PROXY: "none"
+        JAVA_OPTS_APPEND: "-Djgroups.dns.query=keycloak-dev-headless"
 
 # Consolidated SealedSecret with all Keycloak configuration
 # User will populate encrypted values using kubeseal
@@ -86,25 +104,6 @@ sealedSecret:
     KC_DB_URL_HOST: "AgBaCmcc/U0M/4BYSf09xv5AvZlqhgciFuBXAgyufeUc7erAEjwO048sV6rDA4U443DSY+izN73R2qTH1zTQo1+ued5JRD0gnVgyg16e1HVXFKWI3RZFZ2A5+ubEPoqv1cMcW3FokcHAy4gIAqqNwF3biiSJorWM2+ru/tWMz2Ir3B7LqEH7+CKNyXi2mQCqpvgU1/ow6n3LowHvKIUwFsrNL8NwjnWu8sLKoZiLcq4/+fapAPnMehOVyS4MFJF5+MEq1leVxmLq/5VR9VPaljz1eUMgTF7UtnppGwPzOnFiXywFbqbxPZo1CND+sMNrlWqDcN2/vQOWalqP8fFTQeAIfOY9Zi6bX4vJCMPNc98Z7z/QTXtLWGOQiyYBK/iQhFG6n6XyJgddelaemnYAbYdFSDKrrZJx++jnN9tNGXHEz6aHHqzL1up/uvwJgXXjDJUpdb5dxdoN5GxugyrhNhrTM32eaDw32KUWs8v0KCef8PNjmGnAtOtv7rnFdwMvYdb0y8RrfWJlOeyIeKeDMrGsALzwWpKRexZioWzJivfDvgJ0Q33yWWfxQnMpAQKFyxUZOGWmGomy7p9x4BsIun+sgM9+8k/3FLNrwjzVuauTRS8FTHjzo4kyFxpdz7VXWB7IdHG5SEfJO2LbbktvcQf/UqvLcSK5ZNpCnMIqsSTYhfum67zXPa4F//z/mkXlxVwrChQPCZv2HdBTmjlBnvth6/xw5s/dcBbGHIAefJgYxNaRXV1Y7i6igQOht+wKId4VOrY="
     KC_DB_URL_PORT: "AgCG6Ugrl5O/HomIS5FHGlj7S8rifwC/FtbYXalt95bkpU+ObqC0cH2/j0jM14lpu1iCUZenRe3RwFzj1xVlX0l7JUJXalz0tXL3BdCVjatLCIpTUx+x9/ELkyHOJaRYbQdu75fDk3UpURHcR622JdMu1My/F9uaXlgPQKRQr8i0v7A4o60tF/3xT/mj/S1u+uV7mkL4afHgOHzx7SAZziHWFmKEIEoEB2aYWpJeZXLtdY+J6nafFPFntM+AAJtvxliVrZBXOSR1Mvo8MzQKwMmxbw1IdXFIa7eZmo9Y3JBQOsBonL5KWJ920mTvGcuXjSAGM8UGKx4QAvyuM6MM8udOnkaazOAl6rd1uMkGCAYcm2HVh0JHXr4r+0smylbMl9cDNIfLGTWKIA8mpBG3QCLxfttabN0vcn7iuA6bIC7hO7H7nvqPD0cuj33szraPrxvJWVNjKEKskNhBtUziStcaf5/JgsR7QEfZKoqtdzLQzSd33ItVh0NiRSm9leiip1N6iGbfHHEY2q8VDkBH+qXLNLBb3daulEnJrig8MnsqNe3sCR3eC9bAT5g26Jxb4a5aCVSmwYSeX3104micU659eLW/QGz2WCOP91WehXVajaybOp/OnE8wdCsSf+pdx9GIynB5HCI30hHGNbQHoyvg/rrKKx2pQNf0muE9l9OhaVDYIEOf0h/kPiE7PoZ+H9Wx8ZeR"
     KC_DB_URL_DATABASE: "AgAZIXFGd3sTkN17pFciaaz9Fjm7eMFkRmpnhlS11rJA1Ng9BPtQLfAkiaAJWyQIGx/loZKaPRaEReiexZWNFR7IKD6iGOTYYTDz03qKiEbuhZep85bAxTqRFMWKCxTtHJ4nwzHSu2uuPmu2OCFksWFRNm3lL1zzxV7ZwzN7UiVEBdRFUcd28fzgTtSber0uCCf0Bc+0E0PK8KAC9Rs6j+3JpZ1Qeog/Xx+Lpc6PeVDa1tFcl1DqW3LjAl/9boIezpewIE4sEFrKQadGA5jWpXFPT+dynkMnA2Yuj6K9dSv8AoELTk6dlshl22G+N3qq0R/Z/IG9HhqgjGbUBKJwLftD6+t0/BXhFgCBjCk535uKq2rvTgAh2/EVjs7rId2eHBq7dtKET5e0m2TjMQA/7OfFbXkhgTUWOtQS5m9fMEu2vvrwGUW21GLeoMZrXNxhuYqn+7cT9+hNQxl0wuEnLE/HSzE/P0MJeGfSUxxY909nYkMwHcaFVU6OdQIzZotziqUSxH4G4mo9EtAQK81fWmCLYbZLfdGSuSO8b3D1gvuz++1eLGZX7xyBLAWXXnaogUuvgMnj3Bwn3rHiAV5bUhDWwW/pgBzTpQSV+ww7+jbcO/YwPcvwwsGxeR9j8QL3nG0eutmhjraj1F07CBpYNp3CuycuNEXPChYxbNRdUXVbsHcLmVmmLEoTLioO5ftJO27h+zqydF7sJUdyTGk="
-
-# Extra Kubernetes manifests to deploy
-extraManifests:
-  - |
-    apiVersion: v1
-    kind: ConfigMap
-    metadata:
-      name: keycloak-config
-      namespace: {{ .Release.Namespace }}
-      labels:
-        app.kubernetes.io/name: {{ include "keycloak.name" . }}
-        app.kubernetes.io/instance: {{ .Release.Name }}
-    data:
-      KC_HEALTH_ENABLED: "true"
-      KC_METRICS_ENABLED: "false"
-      KC_HTTP_ENABLED: "true"
-      KC_HOSTNAME_STRICT: "false"
-      KC_PROXY: "none"
-      JAVA_OPTS_APPEND: "-Djgroups.dns.query=keycloak-dev-headless"
 
 # NetworkPolicy for cross-namespace database connectivity
 networkPolicy:
