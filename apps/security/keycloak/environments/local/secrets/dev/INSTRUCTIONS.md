@@ -8,13 +8,14 @@ Usa los siguientes valores plaintext para generar el SealedSecret consolidado:
 
 ```yaml
 KEYCLOAK_ADMIN: admin
-KEYCLOAK_ADMIN_PASSWORD: 7NuP8%k&VaGgZSDdyBFy
+KEYCLOAK_ADMIN_PASSWORD: "<tu password del admin>"
 KC_DB: postgres
 KC_DB_USERNAME: keycloak_dev
-KC_DB_PASSWORD: adNcA4t^Q@tJVa80a2zY
-KC_DB_URL_HOST: platform-postgres-dev-rw.data-dev.svc.cluster.local
+KC_DB_PASSWORD: "<tu password de la base de datos>"
+KC_DB_URL_HOST: "<tu host de la base de datos>"
 KC_DB_URL_PORT: "5432"
-KC_DB_URL_DATABASE: keycloak_dev
+KC_DB_URL_DATABASE: "<tu nombre de la base de datos>"
+CLOUDFLARE_TUNNEL_TOKEN: "<tu token de cloudflare tunnel>"
 ```
 
 ## Comandos para Generar el SealedSecret
@@ -24,13 +25,14 @@ KC_DB_URL_DATABASE: keycloak_dev
 ```bash
 kubectl create secret generic keycloak-credentials \
   --from-literal=KEYCLOAK_ADMIN=admin \
-  --from-literal=KEYCLOAK_ADMIN_PASSWORD='7NuP8%k&VaGgZSDdyBFy' \
+  --from-literal=KEYCLOAK_ADMIN_PASSWORD='<tu password del admin>' \
   --from-literal=KC_DB=postgres \
   --from-literal=KC_DB_USERNAME=keycloak_dev \
-  --from-literal=KC_DB_PASSWORD='adNcA4t^Q@tJVa80a2zY' \
-  --from-literal=KC_DB_URL_HOST=platform-postgres-dev-rw.data-dev.svc.cluster.local \
+  --from-literal=KC_DB_PASSWORD='<tu password de la base de datos>' \
+  --from-literal=KC_DB_URL_HOST='<tu host de la base de datos>' \
   --from-literal=KC_DB_URL_PORT=5432 \
-  --from-literal=KC_DB_URL_DATABASE=keycloak_dev \
+  --from-literal=KC_DB_URL_DATABASE='<tu nombre de la base de datos>' \
+  --from-literal=CLOUDFLARE_TUNNEL_TOKEN='<tu token de cloudflare tunnel>' \
   --namespace=security-dev \
   --dry-run=client -o yaml > /tmp/keycloak-credentials-plain.yaml
 ```
@@ -65,6 +67,7 @@ sealedSecret:
     KC_DB_URL_HOST: "<valor-encriptado>"
     KC_DB_URL_PORT: "<valor-encriptado>"
     KC_DB_URL_DATABASE: "<valor-encriptado>"
+    CLOUDFLARE_TUNNEL_TOKEN: "<valor-encriptado>"
 ```
 
 ## Notas

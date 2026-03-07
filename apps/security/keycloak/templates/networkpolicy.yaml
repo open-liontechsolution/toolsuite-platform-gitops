@@ -39,4 +39,13 @@ spec:
           port: 443
         - protocol: TCP
           port: 80
+    # Cloudflare Tunnel (cloudflared) requires port 7844 for QUIC tunnel connections
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: UDP
+          port: 7844
+        - protocol: TCP
+          port: 7844
 {{- end }}
