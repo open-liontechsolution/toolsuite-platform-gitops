@@ -31,9 +31,10 @@ cluster:
         cpu: "1"
         memory: "2Gi"
     
-    # Node affinity to schedule on worker nodes only
-    # (control-plane nodes also carried the performance=high label, which
-    #  pulled the instance onto master1 — restrict to workers instead)
+    # Node affinity: high-performance worker nodes only.
+    # Both expressions are ANDed, so the instance lands on a node that is a
+    # worker AND performance=high (control-plane master1 also carries
+    # performance=high, so the worker label is required to exclude it).
     affinity:
       enablePodAntiAffinity: true
       topologyKey: kubernetes.io/hostname
@@ -46,6 +47,10 @@ cluster:
                   operator: In
                   values:
                     - "true"
+                - key: node.kubernetes.io/performance
+                  operator: In
+                  values:
+                    - high
     
     # Environment labels
     labels:
