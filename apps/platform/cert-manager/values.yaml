@@ -1,0 +1,15 @@
+# cert-manager configuration (wrapper over the official Jetstack chart)
+#
+# Adoption phase (v1.16.1): these values replicate EXACTLY the parameters of the
+# live (orphan) ArgoCD Application so the rendered manifest produces an INERT diff
+# against what is already running in the cluster.
+#
+#   live source.helm.parameters:
+#     - installCRDs = "true"
+#     - featureGates = "ExperimentalGatewayAPISupport=true"
+#
+# On the first version bump (-> v1.17.4) migrate `installCRDs: true` to the modern
+# flag `crds: { enabled: true, keep: true }` (installCRDs is the deprecated alias).
+cert-manager:
+  installCRDs: true
+  featureGates: "ExperimentalGatewayAPISupport=true"
