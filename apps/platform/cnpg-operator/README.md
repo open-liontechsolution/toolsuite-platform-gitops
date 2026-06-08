@@ -157,6 +157,14 @@ This chart uses the official CloudNativePG operator Helm chart for deployment. A
 
 For historical context on the migration to Helm, see `docs/migration/` in the repository root.
 
+### Version upgrades
+
+- **0.22.0 → 0.27.1** (operator `1.24.0` → `1.28.1`): prerequisite for upgrading k3s from
+  1.31 → 1.32 (CNPG 1.24 only supports k8s ≤1.31; the 1.28 line covers k8s 1.32/1.33/1.34).
+  Note: the upstream chart does **not** publish a chart for operator `1.28.3` — the 1.28 line
+  tops out at `1.28.1` (chart `0.27.1`), and chart `0.28.x` jumps to operator `1.29.x`, which
+  does **not** cover k8s 1.32. So `1.28.1` is the target patch. See issue #5.
+
 ## Troubleshooting
 
 ### Operator not starting
