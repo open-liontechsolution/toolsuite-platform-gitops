@@ -31,7 +31,9 @@ cluster:
         cpu: "1"
         memory: "2Gi"
     
-    # Node affinity for high-performance nodes
+    # Node affinity to schedule on worker nodes only
+    # (control-plane nodes also carried the performance=high label, which
+    #  pulled the instance onto master1 — restrict to workers instead)
     affinity:
       enablePodAntiAffinity: true
       topologyKey: kubernetes.io/hostname
@@ -40,10 +42,10 @@ cluster:
         requiredDuringSchedulingIgnoredDuringExecution:
           nodeSelectorTerms:
             - matchExpressions:
-                - key: node.kubernetes.io/performance
+                - key: node-role.kubernetes.io/worker
                   operator: In
                   values:
-                    - high
+                    - "true"
     
     # Environment labels
     labels:
