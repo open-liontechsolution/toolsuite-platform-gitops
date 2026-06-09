@@ -1,0 +1,53 @@
+# Longhorn configuration (wrapper over the official Longhorn chart)
+#
+# Values live under the `longhorn:` subchart key. This file is a faithful replica
+# of the live Helm release (`helm get values longhorn -n longhorn-system`) so that
+# the ArgoCD adoption produces an INERT diff — no workload/CRD churn.
+#
+# NOTE on backup-target: the live cluster has `backup-target`
+# (s3://longhorn-backup@us-east-1/) and `backup-target-credential-secret`
+# (minio-secret) configured as Longhorn *Setting* CRs, set OUT-OF-BAND (not via
+# Helm). They are intentionally NOT declared here: pinning them under
+# defaultSettings would change ownership and break the inert adoption. They remain
+# live Settings, untouched. See README.
+longhorn:
+  defaultSettings:
+    disableRevisionCounter: "true"
+    priorityClass: longhorn-critical
+
+  persistence:
+    defaultClass: true
+    defaultClassReplicaCount: 3
+    defaultFsType: ext4
+    reclaimPolicy: Delete
+    disableRevisionCounter: "true"
+
+  longhornUI:
+    replicas: 2
+    priorityClass: longhorn-critical
+
+  longhornManager:
+    priorityClass: longhorn-critical
+
+  longhornDriver:
+    priorityClass: longhorn-critical
+
+  # Pre-upgrade checker job runs before each version bump and blocks unsupported
+  # upgrade paths (Longhorn only allows consecutive-minor upgrades).
+  preUpgradeChecker:
+    jobEnabled: true
+    upgradeVersionCheck: true
+
+  networkPolicies:
+    enabled: false
+    type: k3s
+
+  service:
+    ui:
+      type: LoadBalancer
+
+  # ServiceMonitor for Longhorn metrics is managed out of this repo
+  # (k3s-local-apps-manifests). Keep disabled here to match the live release.
+  metrics:
+    serviceMonitor:
+      enabled: false
