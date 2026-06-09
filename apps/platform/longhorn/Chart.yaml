@@ -3,14 +3,15 @@ name: longhorn
 description: Longhorn - Cloud-native distributed block storage for Kubernetes
 type: application
 version: 1.0.0
-appVersion: "v1.7.1"
+appVersion: "v1.8.2"
 
 dependencies:
   - name: longhorn
     # Chart version equals the Longhorn release without the leading 'v'.
-    # Pinned to the live release (v1.7.1) so the ArgoCD adoption diff is INERT.
-    # Upgrades happen one minor at a time in later commits: 1.7 -> 1.8 -> 1.9 -> 1.10 -> 1.11 (target v1.11.2).
-    version: "1.7.1"
+    # Upgrade chain (one minor per commit): 1.7.1 (adoption) -> 1.8.2 -> 1.9.2 -> 1.10.2 -> 1.11.2 (target).
+    # Hop 1: 1.7.1 -> 1.8.2. Longhorn enforces consecutive-minor upgrades; the
+    # pre-upgrade checker (preUpgradeChecker.jobEnabled) gates the sync.
+    version: "1.8.2"
     repository: https://charts.longhorn.io
 
 maintainers:
