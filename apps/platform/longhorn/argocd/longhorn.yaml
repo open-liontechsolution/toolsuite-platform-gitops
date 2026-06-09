@@ -1,0 +1,57 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: longhorn
+  namespace: argocd
+  # WARNING: any deletion of this Application MUST be done with --cascade=orphan.
+  # A cascaded delete would let the finalizer tear down Longhorn workloads, CRDs
+  # and (via CRDs) every Volume/Replica in the cluster. See README.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/open-liontechsolution/toolsuite-platform-gitops
+    path: apps/platform/longhorn
+    targetRevision: main
+    helm:
+      # Must match the live Helm release name so ArgoCD adopts the existing
+      # resources (longhorn-manager / longhorn-ui / csi-*) in place instead of
+      # creating duplicates.
+      releaseName: longhorn
+      valueFiles:
+        - values.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: longhorn-system
+
+  syncPolicy:
+    automated:
+      # prune is DELIBERATELY false (deviation from the cert-manager/cnpg-operator
+      # template). Longhorn creates runtime CRs (Volumes, Engines, Replicas,
+      # Settings, Nodes) that are not part of the chart's rendered manifests; with
+      # prune enabled ArgoCD could attempt to delete them and destroy data.
+      prune: false
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      # ServerSideApply lets ArgoCD take field ownership of the Helm-managed
+      # resources without recreating them — required for an in-place adoption.
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  ignoreDifferences:
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+      jsonPointers:
+        - /spec/conversion/webhook/clientConfig/caBundle
+        - /metadata/annotations
