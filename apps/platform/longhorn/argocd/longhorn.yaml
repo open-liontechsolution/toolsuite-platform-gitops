@@ -55,3 +55,12 @@ spec:
       jsonPointers:
         - /spec/conversion/webhook/clientConfig/caBundle
         - /metadata/annotations
+    # longhorn-frontend is a LoadBalancer Service; Kubernetes auto-assigns a
+    # nodePort that the rendered manifest leaves null, so ArgoCD reports a
+    # permanent (cosmetic) OutOfSync. Ignore the auto-assigned nodePort.
+    - group: ""
+      kind: Service
+      name: longhorn-frontend
+      namespace: longhorn-system
+      jsonPointers:
+        - /spec/ports/0/nodePort
