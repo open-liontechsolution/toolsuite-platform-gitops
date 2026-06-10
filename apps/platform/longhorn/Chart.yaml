@@ -3,16 +3,16 @@ name: longhorn
 description: Longhorn - Cloud-native distributed block storage for Kubernetes
 type: application
 version: 1.0.0
-appVersion: "v1.9.2"
+appVersion: "v1.10.2"
 
 dependencies:
   - name: longhorn
     # Chart version equals the Longhorn release without the leading 'v'.
     # Upgrade chain (one minor per commit): 1.7.1 (adoption) -> 1.8.2 -> 1.9.2 -> 1.10.2 -> 1.11.2 (target).
-    # Hop 2: 1.8.2 -> 1.9.2. 1.9.x is the first line that supports k8s 1.33 (the
-    # cluster's version), so this hop returns Longhorn to a supported k8s range.
-    # Longhorn enforces consecutive-minor upgrades; the pre-upgrade checker gates the sync.
-    version: "1.9.2"
+    # Hop 3: 1.9.2 -> 1.10.2. NOTE: from 1.10 there is NO downgrade/rollback, and a
+    # stricter pre-upgrade validation job runs. CRDs must be on longhorn.io/v1beta2
+    # (already satisfied). Longhorn enforces consecutive-minor upgrades.
+    version: "1.10.2"
     repository: https://charts.longhorn.io
 
 maintainers:
