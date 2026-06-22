@@ -1,0 +1,27 @@
+apiVersion: v2
+name: authentik-postgres
+description: CloudNativePG PostgreSQL Cluster dedicated to Authentik (family IdP)
+type: application
+version: 1.0.0
+appVersion: "16.4"
+
+dependencies:
+  - name: cluster
+    version: "0.6.1"
+    repository: https://cloudnative-pg.github.io/charts
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+keywords:
+  - postgresql
+  - database
+  - cluster
+  - cloudnative-pg
+  - authentik
+  - identity
+
+home: https://cloudnative-pg.io
+sources:
+  - https://github.com/cloudnative-pg/cloudnative-pg

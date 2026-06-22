@@ -1,0 +1,68 @@
+# Authentik PostgreSQL cluster - base values for all environments.
+# Mirrors apps/data/cnpg but is a SEPARATE, dedicated cluster for Authentik
+# (isolation requested by the brief: Authentik DB must not share the
+# platform-postgres instance).
+cluster:
+  mode: standalone
+  type: postgresql
+
+  nameOverride: ""
+  fullnameOverride: ""
+
+  cluster:
+    instances: 3
+    imageName: ghcr.io/cloudnative-pg/postgresql:16.4
+
+    storage:
+      size: 20Gi
+      storageClass: ""
+
+    walStorage:
+      enabled: true
+      size: 1Gi
+      storageClass: ""
+
+    resources:
+      requests:
+        cpu: "1000m"
+        memory: "2Gi"
+      limits:
+        cpu: "4000m"
+        memory: "8Gi"
+
+    primaryUpdateStrategy: unsupervised
+
+    affinity:
+      topologyKey: kubernetes.io/hostname
+
+    monitoring:
+      enabled: false
+      podMonitor:
+        enabled: true
+      prometheusRule:
+        enabled: true
+
+    initdb:
+      database: authentik
+      owner: authentik
+      secret:
+        name: authentik-postgres-app
+
+  backups:
+    enabled: false
+    retentionPolicy: "30d"
+    scheduledBackups: []
+
+# SealedSecret with the Authentik DB credentials (username/password).
+# The SAME password must also be sealed into the Authentik release secret
+# (apps/security/authentik, key AUTHENTIK_POSTGRESQL__PASSWORD) for the
+# namespace security-casa. See this chart's README.
+sealedSecret:
+  enabled: false  # Set to true in environment-specific values
+  name: authentik-postgres-app
+  encryptedData:
+    # Encrypt with:
+    #   echo -n "authentik" | kubeseal --raw --from-file=/dev/stdin --namespace data-casa --name authentik-postgres-app --controller-name sealed-secrets --controller-namespace kube-system
+    #   echo -n "<db-pass>" | kubeseal --raw --from-file=/dev/stdin --namespace data-casa --name authentik-postgres-app --controller-name sealed-secrets --controller-namespace kube-system
+    username: ""
+    password: ""

@@ -1,0 +1,17 @@
+# Self-signed internal CA built on cert-manager.
+# Chain: selfSigned (bootstrap) ClusterIssuer -> root CA Certificate -> CA ClusterIssuer.
+# Consumers (Authentik UI ingress, LDAPS outpost, ...) reference `caIssuerName`.
+ca:
+  # Namespace where the root CA secret lives. Must be cert-manager's
+  # cluster-resource namespace (default: cert-manager) so the CA ClusterIssuer
+  # can read the root secret.
+  issuerNamespace: cert-manager
+
+  bootstrapIssuerName: selfsigned-bootstrap
+  caIssuerName: casa-internal-ca
+
+  rootCommonName: "casa internal CA"
+  rootSecretName: casa-internal-ca-root
+  # 10 years for the root.
+  duration: 87600h
+  renewBefore: 720h

@@ -1,0 +1,99 @@
+# Authentik PostgreSQL - Home / Family environment ("casa")
+# Namespace: data-casa
+# Deployment: local k3s cluster with Longhorn storage
+# Separate CNPG cluster from platform-postgres (Authentik-only).
+# Note: "casa" is the home-use environment axis (not dev/qa/prod) - these are
+# family tools running on-prem, not externally-facing project environments.
+
+cluster:
+  fullnameOverride: authentik-postgres-casa
+
+  cluster:
+    imageName: ghcr.io/cloudnative-pg/postgresql:16.4
+
+    # Single instance for a home deployment
+    instances: 1
+
+    # Storage configuration for Longhorn
+    storage:
+      size: 20Gi
+      storageClass: longhorn
+    walStorage:
+      storageClass: longhorn
+      size: 1Gi
+
+    # Modest resources for home use
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+      limits:
+        cpu: "1"
+        memory: "2Gi"
+
+    # Node affinity: high-performance worker nodes only.
+    # Both expressions are ANDed, so the instance lands on a node that is a
+    # worker AND performance=high (control-plane master1 also carries
+    # performance=high, so the worker label is required to exclude it).
+    affinity:
+      enablePodAntiAffinity: true
+      topologyKey: kubernetes.io/hostname
+      podAntiAffinityType: preferred
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: node-role.kubernetes.io/worker
+                  operator: In
+                  values:
+                    - "true"
+                - key: node.kubernetes.io/performance
+                  operator: In
+                  values:
+                    - high
+
+    # Environment labels
+    additionalLabels:
+      app.kubernetes.io/part-of: data-platform
+      app.kubernetes.io/component: authentik-db
+      environment: casa
+      deployment: local
+
+    # Bootstrap configuration
+    bootstrap:
+      initdb:
+        database: authentik
+        owner: authentik
+        secret:
+          name: authentik-postgres-app
+
+    # Primary update strategy
+    primaryUpdateStrategy: unsupervised
+
+    # PostgreSQL tuning for a small home instance
+    postgresql:
+      parameters:
+        max_connections: "100"
+        shared_buffers: "128MB"
+        effective_cache_size: "512MB"
+        maintenance_work_mem: "32MB"
+        work_mem: "1310kB"
+        checkpoint_completion_target: "0.9"
+        wal_buffers: "16MB"
+        default_statistics_target: "100"
+        random_page_cost: "1.1"
+        effective_io_concurrency: "200"
+        min_wal_size: "128MB"
+        max_wal_size: "512MB"
+
+# SealedSecret configuration for the "casa" environment.
+# IMPORTANT: Replace the placeholders with real encrypted values before syncing:
+#   echo -n "authentik"  | kubeseal --raw --from-file=/dev/stdin --namespace data-casa --name authentik-postgres-app --controller-name sealed-secrets --controller-namespace kube-system
+#   echo -n "<db-pass>"  | kubeseal --raw --from-file=/dev/stdin --namespace data-casa --name authentik-postgres-app --controller-name sealed-secrets --controller-namespace kube-system
+# The <db-pass> MUST match AUTHENTIK_POSTGRESQL__PASSWORD sealed in the Authentik release.
+sealedSecret:
+  enabled: true
+  name: authentik-postgres-app
+  encryptedData:
+    username: "AgAGkc2N+2ucRjMhm9Riqk7l6zy/kS//ShqBZqx/5IiyOQps0/Kz/PIZALLYtA1jAUxdV2T1613DyvDdiJfxiSuIya0jk/MkNsVjM9GvNcT3d6qjISHFRSqymUwRasEGBksiBEanihsrR7sEqX6ggeXMEUEygPkMFyxOacfTVPheewGthsZVY3If1yvQuvSyKBIrHk/pkbdplmYB4xN5AUINgMBp7FO031R6Dgt/Vg8K4IfsiDbpDng46E7wo/JLAD21ZtR7ONgSFLbGYkADRVmZoWIH56gAqD8j6GmSu9/M4x81DoYjmGWFbnlwNxxQnSa1MqcV3gTWrFJXaeuHVyTUIDak7C51V9/MWBYF3S9s1QieaqWMBQCcAZzTMdYZsTeCKCVxaM11bM6sytynIWlBTUOH7YIHZ/3kxygFFSIrTRxBE5S0FKnDYSPJBGJlic2z6mc204ba+oHXPDqNCUynIHBaUcJK9jlkGc4I56kXg9lo8D11p16KROculHKaMW8ce0RVut2VdeGNxWgtb/BqJQDKNue4XxNuII5fVV4cj5IlPtuWz0bIU/g1dnHL5ZbqoZgzvEnETSFiFbpot0pySa3MbX/grVK6wTbeb9BJMIUGViSuZmERFhKovNyOnvXQ5Rl6bbRoPBvAseG3lTaO0t+Oaxyq9CuBAFNkea9ptS3/pVRMIn1yn9KxJVBzmNmhmIjUxSQcahs="  # REPLACE: sealed "authentik"
+    password: "AgCKouo7JPJh26kYrr5viHAyV+IKCYw9PlWyflgfyakCLWEgqy9rvJhjsDRqZFNTNdoO3a94LiD8EZH/uq8YSKE/e7BEpHJIEyxgxvC1/XFLvCAaB8jYy8CogMm7/lYPnPwRaQSSU1etwt5JXzBCR7CtjRGmU+I3ZLnD1C3eaekvlDRrdFQ1URAb4FQid5rZHiC9nOm+4y5ZI49SU2UlKvQP4Ux8ZdvE28+c2V6/NiEM3MQcGZ7pJ4qY5FT46zQQB4mpIahdnpZfUkG00kCZys1QutdJPfZlRAPFzWoptj4P8RSbHqja/84zwwnwhXfgdVtAwaYh3oBKXjmndMFwp3E/6mbm+nFnlYckRprv0hmAPEFhLF5Wts6vWw7v+hjF69fEBfPY262aWjkoa7bcLbvBR4L9POaR4Ijvg2w7TYTRG42Vzwy/s8Mr+NPgCPP1CjYsFDUf+Qz/6Y9vxpjytNSodvQt2z1RAKNq1HQzXKDKzEkMDYp2BLOgp74z0FKceTu7yb1dcBsi9v3xLJys7wUNH1d/6C6N8a1U3ErzHqZto/61t5f0MCd2lW2RKlXD3cp8A9fGowhYMkTz7E+m+1TeZGEVqOtHoJ5wUQMjWt8e0KOehO9WzwKfuNo/9JtQs3bcsa+PybY/LFcflRLKapkoSomTYRR3g67DZQ4wxWjKP5zOmy+ztiQWpopA1kW6vHEi7G0Nh21c2d6e8qo1qFpthE7UIw=="  # REPLACE: sealed db password (same plaintext as Authentik's AUTHENTIK_POSTGRESQL__PASSWORD)

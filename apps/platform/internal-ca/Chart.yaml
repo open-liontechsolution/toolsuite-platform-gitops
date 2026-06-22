@@ -1,0 +1,13 @@
+apiVersion: v2
+name: internal-ca
+description: Self-signed internal CA (cert-manager) for private *.casa.lan services (UI + LDAPS)
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+keywords:
+  - cert-manager
+  - pki
+  - ca
+  - selfsigned
+  - internal

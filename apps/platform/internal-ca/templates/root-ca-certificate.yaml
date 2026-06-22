@@ -1,0 +1,24 @@
+# Root CA certificate (self-signed via the bootstrap issuer). The resulting
+# secret is consumed by the CA ClusterIssuer. Distribute ca.crt to clients
+# (browsers, Bazzite/SSSD trust store) so internal TLS/LDAPS is trusted.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Values.ca.rootSecretName }}
+  namespace: {{ .Values.ca.issuerNamespace }}
+  labels:
+    app.kubernetes.io/name: internal-ca
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  isCA: true
+  commonName: {{ .Values.ca.rootCommonName | quote }}
+  secretName: {{ .Values.ca.rootSecretName }}
+  duration: {{ .Values.ca.duration }}
+  renewBefore: {{ .Values.ca.renewBefore }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: {{ .Values.ca.bootstrapIssuerName }}
+    kind: ClusterIssuer
+    group: cert-manager.io

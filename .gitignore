@@ -2,3 +2,7 @@ secret-app*.yaml
 !secret-app.example.yaml
 Chart.lock
 charts/
+
+# Plaintext secret inputs for the sealing helpers (never commit the real ones)
+scripts/*-secrets.env
+!scripts/*-secrets.env.example

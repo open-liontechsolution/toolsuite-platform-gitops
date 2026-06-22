@@ -1,0 +1,10 @@
+# Bootstrap issuer: signs the root CA certificate below.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .Values.ca.bootstrapIssuerName }}
+  labels:
+    app.kubernetes.io/name: internal-ca
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  selfSigned: {}
