@@ -37,9 +37,18 @@ certificates:
 # Cilium BGP LoadBalancer on a pinned IP. Seal the token after first sync.
 ldapOutpost:
   enabled: true
-  authentikHost: "http://authentik-casa-server.security-casa.svc.cluster.local"
+  # HTTPS so the outpost token is encrypted in transit (in-cluster cert isn't
+  # verified — svc DNS not in SAN — but the hop is no longer cleartext).
+  authentikHost: "https://authentik-casa-server.security-casa.svc.cluster.local"
   authentikInsecure: "true"
+  enablePlainLdap: false   # LDAPS-only; SSSD uses ldaps://ldap.casa.lan:636
   loadBalancerIP: 192.169.2.41
+  # Restrict the LDAP LoadBalancer to private LAN ranges. TODO: tighten to the
+  # exact subnet(s) where the Bazzite/SSSD clients live.
+  loadBalancerSourceRanges:
+    - 192.168.0.0/16
+    - 192.169.0.0/16
+    - 10.0.0.0/8
   serviceLabels:
     bgp: blue
   nodeSelector:
