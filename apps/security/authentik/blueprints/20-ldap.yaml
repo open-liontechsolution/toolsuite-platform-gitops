@@ -12,7 +12,7 @@ metadata:
   name: casa-ldap
   labels:
     blueprints.goauthentik.io/instantiate: "true"
-    blueprints.goauthentik.io/description: "casa LDAP provider + outpost (rev3)"
+    blueprints.goauthentik.io/description: "casa LDAP provider + outpost (rev4: Find refs)"
 entries:
   - model: authentik_core.user
     identifiers:
@@ -48,7 +48,10 @@ entries:
       slug: ldap-casa
     attrs:
       name: LDAP (casa)
-      provider: !KeyOf ldap-provider
+      # Reference the provider via !Find (DB lookup) instead of !KeyOf: more
+      # robust than same-run instance binding, which failed with
+      # "KeyOf: failed to find entry with id of ldap-provider".
+      provider: !Find [authentik_providers_ldap.ldapprovider, [name, "LDAP - casa"]]
 
   - model: authentik_outposts.outpost
     identifiers:
@@ -56,4 +59,4 @@ entries:
     attrs:
       type: ldap
       providers:
-        - !KeyOf ldap-provider
+        - !Find [authentik_providers_ldap.ldapprovider, [name, "LDAP - casa"]]
