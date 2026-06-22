@@ -18,21 +18,41 @@ networkPolicy:
   enabled: true
   databaseNamespace: "data-casa"
 
-# UI TLS cert (internal CA) for authentik.casa.lan and the pinned LB IP.
-serverCertificate:
+# Internal-CA certs: UI (casa-internal) + LDAPS (casa-ldap). Folder name under
+# /certs becomes the discovered keypair name referenced by the blueprints.
+certificateIssuer: casa-internal-ca
+certificates:
+  - secretName: authentik-server-tls
+    dnsNames:
+      - authentik.casa.lan
+    ipAddresses:
+      - 192.169.2.40
+  - secretName: authentik-ldap-tls
+    dnsNames:
+      - ldap.casa.lan
+    ipAddresses:
+      - 192.169.2.41
+
+# LDAP outpost: deployed by this chart (manual/external outpost), exposed via
+# Cilium BGP LoadBalancer on a pinned IP. Seal the token after first sync.
+ldapOutpost:
   enabled: true
-  secretName: authentik-server-tls
-  issuerName: casa-internal-ca
-  certsFolder: casa-internal
-  dnsNames:
-    - authentik.casa.lan
-  ipAddresses:
-    - 192.169.2.40
+  authentikHost: "http://authentik-casa-server.security-casa.svc.cluster.local"
+  authentikInsecure: "true"
+  loadBalancerIP: 192.169.2.41
+  serviceLabels:
+    bgp: blue
+  nodeSelector:
+    node-role.kubernetes.io/worker: "true"
+  token:
+    secretName: authentik-ldap-outpost-token
+    encryptedData:
+      AUTHENTIK_TOKEN: ""  # REPLACE: seal the outpost token (see README)
 
 authentik:
   global:
-    # Mount the UI cert so Authentik discovers it as keypair "casa-internal"
-    # (folder name) and serves it on :9443 (assigned to the brand by blueprint).
+    # Mount the UI + LDAP certs so Authentik discovers them as keypairs
+    # "casa-internal" / "casa-ldap" (folder names), referenced by the blueprints.
     volumes:
       - name: ui-cert
         secret:
@@ -42,9 +62,20 @@ authentik:
               path: fullchain.pem
             - key: tls.key
               path: privkey.pem
+      - name: ldap-cert
+        secret:
+          secretName: authentik-ldap-tls
+          items:
+            - key: tls.crt
+              path: fullchain.pem
+            - key: tls.key
+              path: privkey.pem
     volumeMounts:
       - name: ui-cert
         mountPath: /certs/casa-internal
+        readOnly: true
+      - name: ldap-cert
+        mountPath: /certs/casa-ldap
         readOnly: true
 
   authentik:
