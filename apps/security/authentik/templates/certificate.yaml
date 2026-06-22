@@ -1,0 +1,30 @@
+{{- if .Values.serverCertificate.enabled }}
+# UI server certificate signed by the internal CA. Authentik mounts the
+# resulting secret under /certs, discovers it, and serves it on :9443.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Values.serverCertificate.secretName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: authentik
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  secretName: {{ .Values.serverCertificate.secretName }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  {{- with .Values.serverCertificate.dnsNames }}
+  dnsNames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.serverCertificate.ipAddresses }}
+  ipAddresses:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  issuerRef:
+    name: {{ .Values.serverCertificate.issuerName }}
+    kind: ClusterIssuer
+    group: cert-manager.io
+{{- end }}

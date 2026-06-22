@@ -18,7 +18,35 @@ networkPolicy:
   enabled: true
   databaseNamespace: "data-casa"
 
+# UI TLS cert (internal CA) for authentik.casa.lan and the pinned LB IP.
+serverCertificate:
+  enabled: true
+  secretName: authentik-server-tls
+  issuerName: casa-internal-ca
+  certsFolder: casa-internal
+  dnsNames:
+    - authentik.casa.lan
+  ipAddresses:
+    - 192.169.2.40
+
 authentik:
+  global:
+    # Mount the UI cert so Authentik discovers it as keypair "casa-internal"
+    # (folder name) and serves it on :9443 (assigned to the brand by blueprint).
+    volumes:
+      - name: ui-cert
+        secret:
+          secretName: authentik-server-tls
+          items:
+            - key: tls.crt
+              path: fullchain.pem
+            - key: tls.key
+              path: privkey.pem
+    volumeMounts:
+      - name: ui-cert
+        mountPath: /certs/casa-internal
+        readOnly: true
+
   authentik:
     log_level: info
     postgresql:
@@ -34,22 +62,16 @@ authentik:
 
   server:
     replicas: 1
+    # Exposed directly via Cilium LB-IPAM/BGP (Cilium Ingress is not functional in
+    # this cluster and Gateway API is not enabled). Authentik terminates TLS on
+    # :9443 with the casa-internal-ca cert (mounted via global.volumes -> /certs,
+    # discovered and assigned to the brand by blueprints/10-brand-web-cert.yaml).
+    # 80 -> 9000 (http, redirects), 443 -> 9443 (https).
     service:
-      type: ClusterIP
-    # Expose the UI via the existing Cilium ingress controller + cert-manager.
-    # authentik.casa.lan is internal-only, so TLS is signed by the internal CA
-    # (apps/platform/internal-ca), not Let's Encrypt. Clients must trust that CA.
+      type: LoadBalancer
+      loadBalancerIP: 192.169.2.40
     ingress:
-      enabled: true
-      ingressClassName: cilium
-      annotations:
-        cert-manager.io/cluster-issuer: casa-internal-ca
-      hosts:
-        - authentik.casa.lan
-      tls:
-        - secretName: authentik-server-tls
-          hosts:
-            - authentik.casa.lan
+      enabled: false
     resources:
       requests:
         cpu: "200m"

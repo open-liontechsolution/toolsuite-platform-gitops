@@ -1,0 +1,19 @@
+# Assign the internal-CA UI certificate (discovered from /certs/casa-internal,
+# keypair name "casa-internal") to the brand serving authentik.casa.lan, so the
+# embedded HTTPS listener (:9443) presents it for that host.
+# Note: the keypair name must match the mount folder (serverCertificate.certsFolder).
+# !Find resolves to null until cert discovery runs; the blueprint re-applies and
+# self-heals once the keypair exists.
+version: 1
+metadata:
+  name: casa-brand-web-cert
+  labels:
+    blueprints.goauthentik.io/instantiate: "true"
+entries:
+  - model: authentik_brands.brand
+    identifiers:
+      domain: authentik.casa.lan
+    state: present
+    attrs:
+      branding_title: casa
+      web_certificate: !Find [authentik_crypto.certificatekeypair, [name, casa-internal]]

@@ -19,8 +19,11 @@ Wraps the upstream `authentik` chart (`2026.5.3`).
 - An egress **NetworkPolicy** (DB, Redis, DNS, web), mirroring Keycloak's.
 - A **blueprints ConfigMap** built from `blueprints/*.yaml` and mounted into the worker
   (`authentik.blueprints.configMaps: [authentik-blueprints]`), so config stays in git.
-- An **Ingress** (Cilium class) for the UI at `authentik.casa.lan`, TLS signed by the
-  internal CA (`apps/platform/internal-ca`, ClusterIssuer `casa-internal-ca`).
+- A **LoadBalancer Service** (Cilium LB-IPAM/BGP, pinned `192.169.2.40`) exposing the UI —
+  Cilium Ingress is not functional in this cluster and Gateway API is not enabled. Authentik
+  terminates TLS on `:9443` with a `casa-internal-ca` cert (`templates/certificate.yaml`),
+  mounted into `/certs` and discovered, then assigned to the `authentik.casa.lan` brand by
+  `blueprints/10-brand-web-cert.yaml`. Point DNS `authentik.casa.lan` → `192.169.2.40`.
 
 ## External dependencies (deploy first)
 
