@@ -69,10 +69,16 @@ certificates: []
 ldapOutpost:
   enabled: false
   image: ghcr.io/goauthentik/ldap:2026.5.3
-  # In-cluster URL of the Authentik server (http -> port 80 -> 9000).
+  # In-cluster HTTPS URL of the Authentik server (443 -> 9443) so the outpost
+  # token is never sent in cleartext. authentikInsecure skips cert verification
+  # (the in-cluster svc DNS isn't in the cert SAN); the hop is still encrypted.
   authentikHost: ""
   authentikInsecure: "true"
+  # Serve LDAPS (:636) only by default. Plaintext LDAP (:389) is opt-in.
+  enablePlainLdap: false
   loadBalancerIP: ""
+  # Restrict who can reach the LDAP LoadBalancer (SSSD client subnets).
+  loadBalancerSourceRanges: []
   serviceLabels: {}
   nodeSelector: {}
   resources:

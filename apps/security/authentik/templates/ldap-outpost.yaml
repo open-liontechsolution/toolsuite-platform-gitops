@@ -59,8 +59,10 @@ spec:
                   name: {{ $o.token.secretName }}
                   key: AUTHENTIK_TOKEN
           ports:
+            {{- if $o.enablePlainLdap }}
             - name: ldap
               containerPort: 3389
+            {{- end }}
             - name: ldaps
               containerPort: 6636
           resources:
@@ -83,13 +85,21 @@ spec:
   {{- with $o.loadBalancerIP }}
   loadBalancerIP: {{ . | quote }}
   {{- end }}
+  {{- with $o.loadBalancerSourceRanges }}
+  # Scope LAN exposure to known SSSD client subnets.
+  loadBalancerSourceRanges:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     app.kubernetes.io/name: authentik-ldap-outpost
     app.kubernetes.io/instance: {{ .Release.Name }}
   ports:
+    # LDAPS only by default; plaintext LDAP :389 is opt-in (enablePlainLdap).
+    {{- if $o.enablePlainLdap }}
     - name: ldap
       port: 389
       targetPort: ldap
+    {{- end }}
     - name: ldaps
       port: 636
       targetPort: ldaps
