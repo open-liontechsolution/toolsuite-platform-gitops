@@ -27,8 +27,10 @@ entries:
     identifiers:
       name: LDAP - casa
     attrs:
-      bind_flow: !Find [authentik_flows.flow, [slug, default-authentication-flow]]
-      unbind_flow: !Find [authentik_flows.flow, [slug, default-invalidation-flow]]
+      # NOTE: the blueprint/API serializer uses authorization_flow + invalidation_flow
+      # (the Terraform provider's bind_flow/unbind_flow names do NOT work here).
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-authentication-flow]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-invalidation-flow]]
       base_dn: dc=ldap,dc=casa,dc=lan
       certificate: !Find [authentik_crypto.certificatekeypair, [name, casa-ldap]]
       tls_server_name: ldap.casa.lan
