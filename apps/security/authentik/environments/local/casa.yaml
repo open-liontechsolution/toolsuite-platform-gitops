@@ -56,7 +56,7 @@ ldapOutpost:
   token:
     secretName: authentik-ldap-outpost-token
     encryptedData:
-      AUTHENTIK_TOKEN: ""  # REPLACE: seal the outpost token (see README)
+      AUTHENTIK_TOKEN: "AgB7Ed7msFSbx+N9Q28ITx6FPKJkDk27QKmfE5/daChIuLSek+GIU4TYohFavEUKyVVhBqLQnd86VQuJmB6cH/xxmrIsp4w5IukBCz1BTJJXuTWj9B/I/j3HfgxgtWgkGmJVk61h7027Jl5opJrMAxyGBMwzgaQ/jwgsxzt6phXoXPRrDZthvqsyyWGxCGFIOuACsPToK06jvDIyXO508G+4AcJVRpL9nhP4nmZOHQ8TzKwm9GsIcON+rPuiAb+4opmcp23A0qG8N72/miL+I3Ja6jayflyzTcZYK6488q1XUz7xHQaOuGCqEWEk9UVRbaTcFpSMv7u1QlTyNtCNsC8mAatrC/5EZN60+4scsF28+DYNGv/XGznqPGQ+QH+bnpCTodq8bxMv/oLZhF+pfCe6BeN8Zk3WFNdkb1ly/fheSpedPj4teim/lNiXBhGA91rVjuq1izWoFIRgq875MxVIj3JsZKqcqL9kvWp6+CbO9vaxt2y/LGNzyvbupWjfqUqwFfK7ufb8bplI+NZik2yCUwYVGkMESRvjzpTqnLqwrJHTQFFyO0EU6SIwgXXjsmimdLsmquYegkpxfA0GZEExhgY1yAK3eVWUikPyPmNCJSgg5pbwz6jpoiHydcWP2Gu7s1/Y1XPjANYyNIg7By9YlVK+p8MnD5Hu8FEiYQBWBfrXgN+6k/6YEe4lE5muhaAR5HKPV7UmyQU7eK3JJWuDRfg7wGGretqU78Gm8tc1bRbQeww45kajLGsaeVwRAnuVJWTfGgoosIQElDQ="
 
 authentik:
   global:
