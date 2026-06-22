@@ -70,6 +70,9 @@ authentik:
     service:
       type: LoadBalancer
       loadBalancerIP: 192.169.2.40
+      # Required: the Cilium blue-pool only selects services labelled bgp=blue.
+      labels:
+        bgp: blue
     ingress:
       enabled: false
     resources:
