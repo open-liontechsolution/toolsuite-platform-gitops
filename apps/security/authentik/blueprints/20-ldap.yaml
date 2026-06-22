@@ -1,0 +1,51 @@
+# LDAP provider + application + outpost + SSSD service account (Fase 2).
+# - base_dn / UID-GID start ≥ 5000 (avoid collision with Bazzite locals at 1000+)
+# - LDAPS cert = keypair "casa-ldap" (discovered from /certs/casa-ldap, signed by
+#   casa-internal-ca), pushed to the outpost by the core for LDAPS :636.
+# - The outpost is "external" (no service_connection): its Deployment/Service are
+#   deployed by this chart (templates/ldap-outpost.yaml).
+# Post-apply manual steps (secrets): seal the outpost token, and create + retrieve
+# an app-password token for ldap-service for SSSD's ldap_default_authtok. The
+# service account also needs the "Search full LDAP directory" permission (RBAC).
+version: 1
+metadata:
+  name: casa-ldap
+  labels:
+    blueprints.goauthentik.io/instantiate: "true"
+entries:
+  - model: authentik_core.user
+    identifiers:
+      username: ldap-service
+    attrs:
+      name: LDAP Service Account (SSSD)
+      type: service_account
+      path: users
+
+  - id: ldap-provider
+    model: authentik_providers_ldap.ldapprovider
+    identifiers:
+      name: LDAP - casa
+    attrs:
+      bind_flow: !Find [authentik_flows.flow, [slug, default-authentication-flow]]
+      unbind_flow: !Find [authentik_flows.flow, [slug, default-invalidation-flow]]
+      base_dn: dc=ldap,dc=casa,dc=lan
+      certificate: !Find [authentik_crypto.certificatekeypair, [name, casa-ldap]]
+      tls_server_name: ldap.casa.lan
+      uid_start_number: 5000
+      gid_start_number: 5000
+      mfa_support: false
+
+  - model: authentik_core.application
+    identifiers:
+      slug: ldap-casa
+    attrs:
+      name: LDAP (casa)
+      provider: !KeyOf ldap-provider
+
+  - model: authentik_outposts.outpost
+    identifiers:
+      name: LDAP outpost (casa)
+    attrs:
+      type: ldap
+      providers:
+        - !KeyOf ldap-provider

@@ -72,18 +72,40 @@ helm lint . -f values.yaml -f environments/local/casa.yaml
 UI answers over HTTPS; worker system tasks green; pod restarts keep state; a Pi node
 failover reschedules server/worker.
 
-## Next: Fase 2 (LDAP + OIDC/SAML) — partially scaffolded here
+## Fase 2 — LDAP (desktop login backbone)
 
-`blueprints/00-family-groups.yaml` creates the base groups (`familia`, `adultos`,
-`menores`, `pc-salon`, `pc-estudio`). Still **TODO** as blueprints (do after the core is
-running and the schema is verified against `2026.5.3`):
+Deployed by this chart:
+- `blueprints/00-family-groups.yaml` — groups `familia`, `adultos`, `menores`, `pc-salon`,
+  `pc-estudio`.
+- `blueprints/20-ldap.yaml` — LDAP **provider** (`base_dn=dc=ldap,dc=casa,dc=lan`,
+  UID/GID start `5000`, `bind_flow`/`unbind_flow`, LDAPS cert `casa-ldap`), **application**,
+  **outpost** (external), and the **`ldap-service`** service account for SSSD.
+- `templates/ldap-outpost.yaml` — the outpost Deployment + LoadBalancer Service
+  (`bgp=blue`, pinned **`192.169.2.41`**, LDAP `389` / LDAPS `636`) + token SealedSecret.
+- LDAPS cert `authentik-ldap-tls` (cert-manager, `casa-internal-ca`), discovered as keypair
+  `casa-ldap` and assigned to the provider.
 
-- **LDAP Provider**: Base DN `DC=ldap,DC=casa,DC=lan`, **UID/GID start ≥ 5000** (avoid
-  collision with Bazzite local users at 1000+), service account in the search group.
-- **LDAP Outpost**: expose **LDAPS :636** via a `Service type: LoadBalancer` — the cluster
-  has Cilium LB-IPAM (`blue-pool` 192.169.2.0/24). Cert signed by `casa-internal-ca`
-  (`apps/platform/internal-ca`); the same CA is trusted by SSSD clients.
-- **OIDC + SAML** Applications/Providers for ChromeOS/Android (Fase 6 web side).
+Point DNS `ldap.casa.lan` → `192.169.2.41`.
 
-The host-level consumers of this IdP (Bazzite/SSSD, NFS home roaming, parental controls)
-live in the **`kxs-ansible`** repo, not here.
+### Post-sync manual steps (secrets/RBAC that can't be pre-baked)
+
+1. **Outpost token** — Authentik UI → *Applications → Outposts → "LDAP outpost (casa)"* →
+   copy the token, then seal it into `ldapOutpost.token.encryptedData.AUTHENTIK_TOKEN`:
+   ```bash
+   echo -n "<outpost-token>" | kubeseal --raw --from-file=/dev/stdin \
+     --namespace security-casa --name authentik-ldap-outpost-token \
+     --controller-name sealed-secrets --controller-namespace kube-system
+   ```
+2. **Search permission** — grant `ldap-service` the *Search full LDAP directory* permission
+   (Directory → Users → ldap-service → Permissions, or via an RBAC role) so SSSD can search.
+3. **SSSD bind token** — create an app-password token for `ldap-service`; that token is
+   SSSD's `ldap_default_authtok` (consumed in the `kxs-ansible` repo, not here).
+
+SSSD then binds `ldaps://ldap.casa.lan:636`, `ldap_schema=rfc2307bis`,
+`ldap_search_base=dc=ldap,dc=casa,dc=lan`. Distribute `casa-internal-ca` to client trust
+stores (kxs-ansible).
+
+## Later: Fase 6 web (OIDC/SAML)
+
+OIDC + SAML Application/Provider blueprints for ChromeOS/Android. The host-level consumers
+(Bazzite/SSSD, NFS home roaming, parental controls) live in **`kxs-ansible`** (#23), not here.

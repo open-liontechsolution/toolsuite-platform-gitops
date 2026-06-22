@@ -47,19 +47,45 @@ networkPolicy:
   databaseNamespace: ""
 
 # ----------------------------------------------------------------------------
-# cert-manager Certificate for the UI, signed by the internal CA. Authentik
-# terminates TLS on :9443 with this cert (mounted into /certs and discovered).
-# Replaces the ingress-shim cert now that the UI is exposed via LoadBalancer.
+# cert-manager Certificates signed by the internal CA. Each is mounted into
+# /certs/<folder> on the authentik pods and discovered as a keypair named
+# <folder>, then referenced from blueprints (UI brand / LDAP provider).
+#   - authentik-server-tls (folder casa-internal): UI on :9443
+#   - authentik-ldap-tls    (folder casa-ldap):     LDAPS on the outpost
 # ----------------------------------------------------------------------------
-serverCertificate:
+certificateIssuer: casa-internal-ca
+certificates: []
+  # - secretName: authentik-server-tls
+  #   dnsNames: [authentik.casa.lan]
+  #   ipAddresses: [192.169.2.40]
+
+# ----------------------------------------------------------------------------
+# Manual LDAP outpost (Deployment + LoadBalancer Service + token SealedSecret).
+# The provider/application/outpost objects themselves are created by
+# blueprints/20-ldap.yaml. After the first sync, retrieve the outpost token from
+# Authentik (Applications > Outposts) and seal it into token.encryptedData
+# (see README). The outpost serves LDAP :389 and LDAPS :636.
+# ----------------------------------------------------------------------------
+ldapOutpost:
   enabled: false
-  secretName: authentik-server-tls
-  issuerName: casa-internal-ca
-  # The discovery folder name under /certs becomes the keypair name referenced
-  # by blueprints/10-brand-web-cert.yaml.
-  certsFolder: casa-internal
-  dnsNames: []
-  ipAddresses: []
+  image: ghcr.io/goauthentik/ldap:2026.5.3
+  # In-cluster URL of the Authentik server (http -> port 80 -> 9000).
+  authentikHost: ""
+  authentikInsecure: "true"
+  loadBalancerIP: ""
+  serviceLabels: {}
+  nodeSelector: {}
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+  token:
+    secretName: authentik-ldap-outpost-token
+    encryptedData:
+      AUTHENTIK_TOKEN: ""
 
 # ----------------------------------------------------------------------------
 # Upstream authentik subchart configuration.
