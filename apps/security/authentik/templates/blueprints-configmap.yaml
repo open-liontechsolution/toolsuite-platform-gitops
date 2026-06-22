@@ -1,0 +1,20 @@
+{{- /*
+Build a ConfigMap from every blueprints/*.yaml file in this chart. The
+authentik worker mounts it (authentik.blueprints.configMaps: [authentik-blueprints])
+and applies any key ending in `.yaml`. This is how Authentik config (groups,
+providers, flows, property mappings) stays versioned in git.
+*/}}
+{{- $files := .Files.Glob "blueprints/*.yaml" }}
+{{- if $files }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authentik-blueprints
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: authentik
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+{{ ($files).AsConfig | indent 2 }}
+{{- end }}

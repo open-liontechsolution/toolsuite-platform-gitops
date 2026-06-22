@@ -1,0 +1,24 @@
+apiVersion: v2
+name: authentik
+description: Authentik - centralized family Identity Provider (LDAP + OIDC/SAML), independent from Keycloak
+type: application
+version: 1.0.0
+appVersion: "2026.5.3"
+
+dependencies:
+  - name: authentik
+    version: "2026.5.3"
+    repository: https://charts.goauthentik.io
+
+keywords:
+  - sso
+  - idp
+  - ldap
+  - oidc
+  - saml
+  - authentik
+  - identity
+
+home: https://goauthentik.io
+sources:
+  - https://github.com/goauthentik/authentik

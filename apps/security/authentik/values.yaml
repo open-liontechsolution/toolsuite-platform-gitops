@@ -1,0 +1,110 @@
+# Authentik wrapper chart - base values for all environments.
+# Local config lives under the `authentik:` subchart key. Repo-specific
+# resources (SealedSecret, dedicated Redis, NetworkPolicy, blueprints
+# ConfigMap) are added under templates/.
+
+# ----------------------------------------------------------------------------
+# Dedicated Redis (the official authentik chart no longer bundles Redis).
+# Deployed as plain manifests in templates/redis.yaml. Dev = single instance;
+# prod should switch to a replicated Redis (documented in README).
+# ----------------------------------------------------------------------------
+redis:
+  enabled: true
+  image: redis:7-alpine
+  port: 6379
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "250m"
+      memory: "256Mi"
+  persistence:
+    enabled: true
+    storageClass: longhorn
+    size: 1Gi
+  nodeSelector: {}
+
+# ----------------------------------------------------------------------------
+# SealedSecret holding the Authentik runtime secrets. Injected into server +
+# worker via authentik.global.env (secretKeyRef). The plaintext values are
+# never committed; only the kubeseal ciphertext lives in env values files.
+# ----------------------------------------------------------------------------
+sealedSecret:
+  enabled: false
+  name: authentik-secret
+  encryptedData:
+    AUTHENTIK_SECRET_KEY: ""
+    AUTHENTIK_POSTGRESQL__PASSWORD: ""
+    AUTHENTIK_BOOTSTRAP_PASSWORD: ""
+    AUTHENTIK_BOOTSTRAP_TOKEN: ""
+
+# ----------------------------------------------------------------------------
+# Egress NetworkPolicy (mirrors apps/security/keycloak): DB, redis, DNS, web.
+# ----------------------------------------------------------------------------
+networkPolicy:
+  enabled: false
+  databaseNamespace: ""
+
+# ----------------------------------------------------------------------------
+# Upstream authentik subchart configuration.
+# ----------------------------------------------------------------------------
+authentik:
+  global:
+    # Inject runtime secrets + redis host into every authentik Deployment.
+    # `env` entries take precedence over the chart-generated config secret.
+    env:
+      - name: AUTHENTIK_REDIS__HOST
+        value: authentik-redis
+      - name: AUTHENTIK_SECRET_KEY
+        valueFrom:
+          secretKeyRef:
+            name: authentik-secret
+            key: AUTHENTIK_SECRET_KEY
+      - name: AUTHENTIK_POSTGRESQL__PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: authentik-secret
+            key: AUTHENTIK_POSTGRESQL__PASSWORD
+      - name: AUTHENTIK_BOOTSTRAP_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: authentik-secret
+            key: AUTHENTIK_BOOTSTRAP_PASSWORD
+      - name: AUTHENTIK_BOOTSTRAP_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: authentik-secret
+            key: AUTHENTIK_BOOTSTRAP_TOKEN
+
+  authentik:
+    log_level: info
+    # secret_key is supplied via global.env (AUTHENTIK_SECRET_KEY) -> SealedSecret
+    secret_key: ""
+    postgresql:
+      # External CNPG cluster (apps/data/authentik-postgres). Overridden per env.
+      host: ""
+      name: authentik
+      user: authentik
+      port: 5432
+    # Redis host is supplied per-environment via global.env (AUTHENTIK_REDIS__HOST).
+
+  # Do NOT use the chart's bundled Postgres/embedded DB.
+  postgresql:
+    enabled: false
+
+  # Blueprints (groups, providers, mappings) mounted from a ConfigMap built
+  # by templates/blueprints-configmap.yaml. Name must match "<release>-blueprints".
+  blueprints:
+    configMaps:
+      - authentik-blueprints
+
+  server:
+    replicas: 1
+    ingress:
+      enabled: false
+    service:
+      type: ClusterIP
+
+  worker:
+    replicas: 1

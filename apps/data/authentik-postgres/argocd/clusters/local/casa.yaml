@@ -1,0 +1,45 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: authentik-postgres-local-casa
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: tools
+
+  source:
+    repoURL: https://github.com/open-liontechsolution/toolsuite-platform-gitops
+    path: apps/data/authentik-postgres
+    targetRevision: main
+    helm:
+      releaseName: authentik-postgres-casa
+      valueFiles:
+        - values.yaml
+        - environments/local/casa.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: data-casa
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # Health assessment for CNPG Cluster
+  ignoreDifferences:
+    - group: postgresql.cnpg.io
+      kind: Cluster
+      jsonPointers:
+        - /status

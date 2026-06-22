@@ -1,0 +1,88 @@
+# Authentik - Home / Family environment ("casa")
+# Namespace: security-casa (coexists with keycloak, fully independent)
+# Deployment: local k3s cluster (arm64 workers) with Longhorn storage
+# Note: "casa" is the home-use environment axis (not dev/qa/prod) - this is the
+# family IdP running on-prem, not an externally-facing project environment.
+
+redis:
+  enabled: true
+  persistence:
+    enabled: true
+    storageClass: longhorn
+    size: 1Gi
+  nodeSelector:
+    node-role.kubernetes.io/worker: "true"
+
+# NetworkPolicy: allow egress to the Authentik CNPG cluster in data-casa.
+networkPolicy:
+  enabled: true
+  databaseNamespace: "data-casa"
+
+authentik:
+  authentik:
+    log_level: info
+    postgresql:
+      # CNPG read-write service for the dedicated Authentik cluster.
+      host: "authentik-postgres-casa-rw.data-casa.svc.cluster.local"
+      name: authentik
+      user: authentik
+      port: 5432
+
+  blueprints:
+    configMaps:
+      - authentik-blueprints
+
+  server:
+    replicas: 1
+    service:
+      type: ClusterIP
+    # Expose the UI via the existing Cilium ingress controller + cert-manager.
+    # authentik.casa.lan is internal-only, so TLS is signed by the internal CA
+    # (apps/platform/internal-ca), not Let's Encrypt. Clients must trust that CA.
+    ingress:
+      enabled: true
+      ingressClassName: cilium
+      annotations:
+        cert-manager.io/cluster-issuer: casa-internal-ca
+      hosts:
+        - authentik.casa.lan
+      tls:
+        - secretName: authentik-server-tls
+          hosts:
+            - authentik.casa.lan
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "512Mi"
+      limits:
+        cpu: "1"
+        memory: "1Gi"
+    nodeSelector:
+      node-role.kubernetes.io/worker: "true"
+
+  worker:
+    replicas: 1
+    # The worker is RAM-hungry; keep it on a worker node.
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "768Mi"
+      limits:
+        cpu: "1"
+        memory: "1536Mi"
+    nodeSelector:
+      node-role.kubernetes.io/worker: "true"
+
+# SealedSecret with Authentik runtime secrets for security-casa.
+# IMPORTANT: replace the placeholders before syncing. Encrypt each value with:
+#   echo -n "<value>" | kubeseal --raw --from-file=/dev/stdin --namespace security-casa --name authentik-secret --controller-name sealed-secrets --controller-namespace kube-system
+# AUTHENTIK_POSTGRESQL__PASSWORD must equal the DB password sealed into
+# data-casa/authentik-postgres-app (apps/data/authentik-postgres).
+sealedSecret:
+  enabled: true
+  name: authentik-secret
+  encryptedData:
+    AUTHENTIK_SECRET_KEY: "AgCcS5YoodtN4NgptaSAUQ16TgZohedQKesFplfKBLdF1tHVaekLPwA3EtDnxI39EXpRL+SMFBImQ881G+D0EkGaUuoeNj7ve7deFOZbkM46ulB4wPefBY798BY0Dijyl8CCwMn3VhUl7vOjGelsVnbHMrX/jscJaPpKFReQ0qOu2fvj1G6EK3EdYwqt41GFUJUCaWslHx94cZ4Gzsfs5KThi+XeKidiyKq7Hmo/LLcRvxs118DmJQuJSLuo0ib/KAVr9O7gkRbIBW3o0bbbjXdy0KHRWc0B+nktCPLJvM3OnH0QCIak68cfAadbSWtWnKF/sek89uVMdLVO0skN31VEz3uOdGO8NCiKl8Y4YvFQvG8VhN8k4NHPMybY4UpBVv4LkheJARQy9Rop4kWeglK6VE/PODv2MlwGIr0OEUpwSDwAs885ry1m5en5QuOtzl0uEwJT+ZhGqXg6dGwsok1XX++JRlTwbX2zU6hce2nMIhxG9+sxM5cQ84RjeK0F4R57V/8ypZasPmtGoQ95LPqaFsQNubNOl9wxt0HnG23vHyHKDmgu0zz/3PtdG2GkWp+Wmq1pdhNoThh3+r5YTsUarFLzlF/47pMMQePSPVtjokBoZQqkyMfZo8TxW74tMcTmVK2UZR4U9Ke7ehsRasNbYPhnFXQVOut/GH6EfHWPzBIRQ+W4djoRw89yBZtLqz+WRKeOg36LUJwMDINTX/q534oTGJYfx3WF0pon3Yc0nry134K41OsBLiG4v46WU5XJ6AI6ZLslWOrW8BwJ+jF8yp2a+QnIZ3wjdf/9QPidhA=="           # REPLACE: `openssl rand -base64 60` then seal
+    AUTHENTIK_POSTGRESQL__PASSWORD: "AgANyVs6eY+rrLgLuyZIaKFvS6N2HlMRtYISvJZohoDGT5epOm662EeJXpSR/e6LnKQZ2w0RKoTpZnP3+p8MheGWMnLrCP6I1/BsHiP3MQZIUnRMwg5uAiJPA15Nh6h6u+9O4DwsfZj7jtgqnXpNusyYtEZojEVLCJL6GWYsNlIhwkZRaIw+z3sepQvfijmK0SGA7H5hqM4EfPiVDglbE+/ScOtzEXXCB2qwpTueDGvyZJ+TGD2UGAwWKb0rr8VtOXucDnuhn3tL6F3+mkj20k3ESgICoU3Ew8n0Ur4CNyZ7Fg3TOB9BFxeOaJfBe8GqLL0UlCJEWKHMMy/pd3fe0p3ISMLXeniyZ9iajH+oNomlfx18xtZ62oLyOvgBFs5Vl1kVhkDfyNN/8hcIxQBUsW2PARKYsTgRxEmIghX8F1E5+9ZoXeXRrWu0cor0EMe41EpXOaOAwKk8dTyCZoNJyV+fmMfqm4/BGFs4AGcOc7xN47vdi3fvI2QVUOG96ol3Gqj7CXDVcNdsBm8nLE5i3n5SBHQZfqY7SXCGt2Wb1aC0C7IA2d5A3v0Prjdul3PMvKwbmHa5S4xoxD0gf5mPf7OcqsNYUtFAzhdRwFxGSdShUfxISWyMLq9UOgsKkNFWZ/zA30As4EkP3G3OetaF7KDofWGdVCkS/TiQ1KKpJ1f/4aO8dZwBe/wYSFU34DbZfFsLgVhw8Qz7/jRq/zJudNG4bc+MXw==" # REPLACE: same plaintext as the CNPG app secret
+    AUTHENTIK_BOOTSTRAP_PASSWORD: "AgAr/ZoQ8qlfcidGH/7NG/R3KijrZfXdKZxD/3850HuQY4NAYJO4kzMvWNLnfT7Wq908CwlRyRVsNopb84kMHlkzezC/kBnzuBqC0J5u4m4FekUc+X8+cb8+QjiRyuoBlavFzQ89fTyK4ZSqdc1PD0Ug9Cb1VzQ0hLCgEckAL8Z3rmqw5tviMdleUvytGQS1/ytGPEZkIxWSIEnQ20wQdkZpCTYxspV9JKd7ql9srfYWX4S4wGXZ2gGnuGKsa8RMa6wSDVOINhwjuJRInNm8KOw0xqRP0gc2ppoeHtG8F0oZFomdcMg6qVb/wFxFYjmycjkkQRqrMmaLMlXKLk3Ebg8Q3E7PF1+GVaUSwSWQm/hdpf2vCOE39xs7YBNFLVH9x8+FKTViEP1/TFYDSyEu8CDC+Cml4lL3Wo+e2uu4ZnfjkvVfDovbJ0CNE48IPrMb2n1zGwy2/+D5JfSorWtVKKLIpEo8+DRJie7EwgtTaMXpEtaonH5L6Yuq33B+ERlcBz7Sjw4XDOrVuxku8tuB6g5ZXkq5qY3C0AI82uPVLKE1AtJ2LDdza1L8OtMVuGeOjXK3fV6T3vyzmiEmVwU7j5Oia7J5rxat+0ZoAu0OcMGq/O9GD1F2SSEaQIgWIlc4zWWzvBYx7iiIt47NaFdlNi2Heiv5h9nXIshMRLkPmK0Y2MXhoosZM5J8Otq1KrlBQOMWLtXTvLDrZwX4wgvuDC9E0c9P/w=="   # REPLACE: initial akadmin password
+    AUTHENTIK_BOOTSTRAP_TOKEN: "AgBpWTxpxXLpsSM7QFqY29K0HdGMrKSWLiWuBPvcNeY6vxuVIsuOXdMqA9N2jdm4T+Jvd9X+oIsDH4E1KmmK1Jmuinxn+xfAJFiK1E6jz5J4CclAOla4kbUw32Tc3uFlXO2n0aIG2j+0Zt6COXqm9P/buQcdoQq25k+3LDKsNx1NK/SGFL2Yl5QNsCXzqwuLD02WRIdnftUWHgPbXTo9/seN8eYYCZy7FjsiO0nrkPNZXJRtPDvITGHEbjj5HXPL65Z7oyGzu5DtjN7NNFXjsUvRv3tGKgA+gWFIHeEW3u981PRxXwP64f7iz1KUsjBYOrKzgHfMu0FRd0waWosBSEqA5RrhSPS/G89k3cwVbRVSjz3yGs6OFX+3nTxIk7UcR9jakDR2KvkkJ3aQelogPFBigu7LTImlT74EfwoIBZBI9kG6Fq6AuGPplRP8+RyxtHQCgE7gdyFXWvUalK5hCmbmCN7DPrf1b9ivUB3T1SC+l+Bkyjk3NS8LWN/JD2k3HVRCSDPfelFDw/uWWDknXTJZEN3mj87K5kYrnWZAwqfWJ90Jf1BX53lFNtx4La7xUNTt36KGgsBqbTAN3Albg+9dN/mj5MDMYa1GVhkTMfORRXnJQ8e/1HuzFzRD6rlCgb8g9bj1uJp2wJW65Sf87M9yRabqgIq0SQNonFpp1Tnvqgn4nPGDwVY/ykSBQuH2HrGehqFtDsQLE16TBAnj5Birwf9RIQ=="      # REPLACE: initial API token

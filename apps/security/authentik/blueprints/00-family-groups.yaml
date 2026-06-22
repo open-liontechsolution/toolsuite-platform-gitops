@@ -1,0 +1,35 @@
+# Authentik blueprint: base family groups.
+# Versioned config (brief requirement: nothing configured only by hand in the UI).
+# `familia`/`adultos`/`menores` are role groups; `pc-*` are per-host access groups
+# used later by the LDAP outpost + SSSD ldap_access_filter (parental control by host).
+version: 1
+metadata:
+  name: family-groups
+  labels:
+    blueprints.goauthentik.io/instantiate: "true"
+entries:
+  - model: authentik_core.group
+    identifiers:
+      name: familia
+    attrs:
+      is_superuser: false
+  - model: authentik_core.group
+    identifiers:
+      name: adultos
+    attrs:
+      is_superuser: false
+  - model: authentik_core.group
+    identifiers:
+      name: menores
+    attrs:
+      is_superuser: false
+  - model: authentik_core.group
+    identifiers:
+      name: pc-salon
+    attrs:
+      is_superuser: false
+  - model: authentik_core.group
+    identifiers:
+      name: pc-estudio
+    attrs:
+      is_superuser: false

@@ -1,0 +1,52 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: authentik-egress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: authentik
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: authentik
+  policyTypes:
+    - Egress
+  egress:
+    # PostgreSQL (CNPG cluster in the data namespace)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.databaseNamespace }}
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Dedicated Redis (same namespace)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.redis.port }}
+    # DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Outbound web (ACME, OAuth/OIDC federations, GeoIP updates, etc.)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+{{- end }}
