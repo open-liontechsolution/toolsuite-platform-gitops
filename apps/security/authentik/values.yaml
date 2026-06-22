@@ -47,6 +47,21 @@ networkPolicy:
   databaseNamespace: ""
 
 # ----------------------------------------------------------------------------
+# cert-manager Certificate for the UI, signed by the internal CA. Authentik
+# terminates TLS on :9443 with this cert (mounted into /certs and discovered).
+# Replaces the ingress-shim cert now that the UI is exposed via LoadBalancer.
+# ----------------------------------------------------------------------------
+serverCertificate:
+  enabled: false
+  secretName: authentik-server-tls
+  issuerName: casa-internal-ca
+  # The discovery folder name under /certs becomes the keypair name referenced
+  # by blueprints/10-brand-web-cert.yaml.
+  certsFolder: casa-internal
+  dnsNames: []
+  ipAddresses: []
+
+# ----------------------------------------------------------------------------
 # Upstream authentik subchart configuration.
 # ----------------------------------------------------------------------------
 authentik:
@@ -76,6 +91,11 @@ authentik:
           secretKeyRef:
             name: authentik-secret
             key: AUTHENTIK_BOOTSTRAP_TOKEN
+    # Mount the UI TLS cert into /certs on server + worker so Authentik discovers
+    # it (folder name = serverCertificate.certsFolder = keypair name). Gated so
+    # `helm template` works before the secret exists; enabled per environment.
+    volumes: []
+    volumeMounts: []
 
   authentik:
     log_level: info
