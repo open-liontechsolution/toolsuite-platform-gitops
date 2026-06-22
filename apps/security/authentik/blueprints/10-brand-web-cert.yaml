@@ -9,6 +9,7 @@ metadata:
   name: casa-brand-web-cert
   labels:
     blueprints.goauthentik.io/instantiate: "true"
+    blueprints.goauthentik.io/description: "casa UI brand cert (rev2)"
 entries:
   - model: authentik_brands.brand
     identifiers:

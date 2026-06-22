@@ -12,6 +12,7 @@ metadata:
   name: casa-ldap
   labels:
     blueprints.goauthentik.io/instantiate: "true"
+    blueprints.goauthentik.io/description: "casa LDAP provider + outpost (rev2)"
 entries:
   - model: authentik_core.user
     identifiers:
