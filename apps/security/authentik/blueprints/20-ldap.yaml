@@ -12,7 +12,7 @@ metadata:
   name: casa-ldap
   labels:
     blueprints.goauthentik.io/instantiate: "true"
-    blueprints.goauthentik.io/description: "casa LDAP provider + outpost (rev4: Find refs)"
+    blueprints.goauthentik.io/description: "casa LDAP provider + outpost (rev5: outpost config)"
 entries:
   - model: authentik_core.user
     identifiers:
@@ -60,3 +60,10 @@ entries:
       type: ldap
       providers:
         - !Find [authentik_providers_ldap.ldapprovider, [name, "LDAP - casa"]]
+      # config is required by the serializer. External outpost (we deploy it),
+      # so kubernetes_* settings are irrelevant; the pod gets the host/token via env.
+      config:
+        log_level: info
+        authentik_host: "https://authentik-casa-server.security-casa.svc.cluster.local"
+        authentik_host_insecure: true
+        object_naming_template: "ak-outpost-%(name)s"
