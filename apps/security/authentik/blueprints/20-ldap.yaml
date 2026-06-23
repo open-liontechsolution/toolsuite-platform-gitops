@@ -12,7 +12,7 @@ metadata:
   name: casa-ldap
   labels:
     blueprints.goauthentik.io/instantiate: "true"
-    blueprints.goauthentik.io/description: "casa LDAP provider + outpost (rev6: mfa_support for app-password bind)"
+    blueprints.goauthentik.io/description: "casa LDAP provider + outpost (rev7: search perm for ldap-service)"
 entries:
   - model: authentik_core.user
     identifiers:
@@ -41,6 +41,12 @@ entries:
       # does NOT force MFA: users without an MFA device bind with just their
       # password; users who HAVE MFA append their TOTP. Standard Authentik+SSSD pattern.
       mfa_support: true
+    # Grant the SSSD service account the object permission to search the whole
+    # directory (otherwise it can only see itself). Done here (GitOps) instead of
+    # the UI. Codename on the ldapprovider model = search_full_directory.
+    permissions:
+      - permission: search_full_directory
+        user: !Find [authentik_core.user, [username, ldap-service]]
 
   - model: authentik_core.application
     identifiers:
