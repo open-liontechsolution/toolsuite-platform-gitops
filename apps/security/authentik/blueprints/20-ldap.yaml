@@ -12,7 +12,7 @@ metadata:
   name: casa-ldap
   labels:
     blueprints.goauthentik.io/instantiate: "true"
-    blueprints.goauthentik.io/description: "casa LDAP provider + outpost (rev5: outpost config)"
+    blueprints.goauthentik.io/description: "casa LDAP provider + outpost (rev6: mfa_support for app-password bind)"
 entries:
   - model: authentik_core.user
     identifiers:
@@ -36,12 +36,11 @@ entries:
       tls_server_name: ldap.casa.lan
       uid_start_number: 5000
       gid_start_number: 5000
-      # Intentional: this provider backs SSSD *desktop* login (incl. minors,
-      # offline cache). Appending TOTP to the password at the GDM/login prompt
-      # every time is impractical for a family workstation, so MFA is not enforced
-      # on the LDAP bind. MFA is applied on the web side (OIDC/SAML, Fase 6).
-      # Set to true if you want SSSD clients to append TOTP to the password.
-      mfa_support: false
+      # Must be true so the outpost accepts the ldap-service app-password token for
+      # bind (Authentik only validates app passwords when mfa_support is on). This
+      # does NOT force MFA: users without an MFA device bind with just their
+      # password; users who HAVE MFA append their TOTP. Standard Authentik+SSSD pattern.
+      mfa_support: true
 
   - model: authentik_core.application
     identifiers:
