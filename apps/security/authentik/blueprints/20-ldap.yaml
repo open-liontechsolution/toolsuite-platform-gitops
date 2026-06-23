@@ -12,7 +12,7 @@ metadata:
   name: casa-ldap
   labels:
     blueprints.goauthentik.io/instantiate: "true"
-    blueprints.goauthentik.io/description: "casa LDAP provider + outpost (rev7: search perm for ldap-service)"
+    blueprints.goauthentik.io/description: "casa LDAP provider + outpost (rev8: search perm codename fix)"
 entries:
   - model: authentik_core.user
     identifiers:
@@ -45,7 +45,7 @@ entries:
     # directory (otherwise it can only see itself). Done here (GitOps) instead of
     # the UI. Codename on the ldapprovider model = search_full_directory.
     permissions:
-      - permission: search_full_directory
+      - permission: authentik_providers_ldap.search_full_directory
         user: !Find [authentik_core.user, [username, ldap-service]]
 
   - model: authentik_core.application
