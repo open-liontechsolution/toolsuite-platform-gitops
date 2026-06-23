@@ -33,3 +33,10 @@ entries:
       name: pc-estudio
     attrs:
       is_superuser: false
+  # Per-host access group for the Bazzite VM on the SV1 Proxmox node.
+  # SSSD on that VM gates login with memberOf=cn=pc-sv1,ou=groups,dc=ldap,dc=casa,dc=lan
+  - model: authentik_core.group
+    identifiers:
+      name: pc-sv1
+    attrs:
+      is_superuser: false

@@ -1,0 +1,23 @@
+# Family user accounts (added incrementally as needed).
+# Authentik assigns POSIX uidNumber/gidNumber automatically and stably
+# (uid_start_number 5000 + user pk). loginShell/homeDirectory are fixed on the
+# SSSD side (default_shell=/bin/bash, override_homedir=/home/%u), not per-user here.
+# Group membership via !Find by name (familia + adultos|menores + per-host pc-*).
+version: 1
+metadata:
+  name: family-users
+  labels:
+    blueprints.goauthentik.io/instantiate: "true"
+entries:
+  - model: authentik_core.user
+    identifiers:
+      username: ariadna
+    attrs:
+      name: Ariadna
+      type: internal
+      path: users
+      is_active: true
+      groups:
+        - !Find [authentik_core.group, [name, familia]]
+        - !Find [authentik_core.group, [name, menores]]
+        - !Find [authentik_core.group, [name, pc-sv1]]
