@@ -21,3 +21,16 @@ entries:
         - !Find [authentik_core.group, [name, familia]]
         - !Find [authentik_core.group, [name, menores]]
         - !Find [authentik_core.group, [name, pc-sv1]]
+
+  - model: authentik_core.user
+    identifiers:
+      username: natalia
+    attrs:
+      name: Natalia
+      type: internal
+      path: users
+      is_active: true
+      groups:
+        - !Find [authentik_core.group, [name, familia]]
+        - !Find [authentik_core.group, [name, adultos]]
+        - !Find [authentik_core.group, [name, pc-sv1]]
