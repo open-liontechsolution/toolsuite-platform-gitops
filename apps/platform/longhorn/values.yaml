@@ -45,6 +45,8 @@ longhorn:
   service:
     ui:
       type: LoadBalancer
+      annotations:
+        lbipam.cilium.io/ips: "192.169.2.9"
 
   # ServiceMonitor for Longhorn metrics is managed out of this repo
   # (k3s-local-apps-manifests). Keep disabled here to match the live release.
