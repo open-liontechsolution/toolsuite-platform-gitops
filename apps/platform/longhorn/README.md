@@ -11,10 +11,32 @@ Application).
 > This wrapper adopts the live release at 1.7.1 (inert diff) so the off-EOL upgrade chain can then run
 > through GitOps, one minor per commit.
 
-The **backup target** (`s3://longhorn-backup@us-east-1/`, credential secret `minio-secret`) and the
-**RecurringJobs** (snapshots/backups) are configured as Longhorn `Setting`/`RecurringJob` CRs
-**out-of-band** (not via Helm). They are intentionally NOT declared in `values.yaml` — pinning them
-would change ownership and break the inert adoption. They remain live, untouched.
+The **backup target** (`s3://longhorn-backup@us-east-1/`, credential secret `minio-secret`) is still
+configured as a live Longhorn `Setting` CR **out-of-band** (not via Helm): pinning it under
+`defaultSettings` would change ownership, and the credential itself is a hand-made Secret that is not
+in Git anywhere — see the backup section below.
+
+The **RecurringJobs** were in the same situation (created by hand from the Longhorn UI, hence names
+like `c-0xh3u3`) until `templates/recurring-jobs.yaml` landed. The legacy ones are deliberately *not*
+imported — they still guard the only two volumes that were being backed up, and re-declaring them
+would mean recreating them under new names. New coverage goes through the `prod` group instead.
+
+### Backups: the `prod` group
+
+A volume is backed up daily by labelling it:
+
+```bash
+kubectl -n longhorn-system label volume <vol> recurring-job-group.longhorn.io/prod=enabled
+```
+
+`templates/recurring-jobs.yaml` declares the `prod-backup` RecurringJob that claims that group, plus a
+`longhorn-prod` StorageClass whose `recurringJobSelector` puts **new** volumes in the group
+automatically. Do **not** use the `default` group: every volume in the cluster carries that label,
+including `*-dev`, and no backup job claims it — which is exactly how the cluster ended up with 2 of
+21 volumes covered (`juanjocop/k3s-local-apps-manifests#7`).
+
+`storageClassName` is immutable on a live PVC, so pre-existing volumes are labelled once by hand; the
+StorageClass only covers volumes created from now on.
 
 ## Layout
 
@@ -22,6 +44,8 @@ would change ownership and break the inert adoption. They remain live, untouched
 apps/platform/longhorn/
 ├── Chart.yaml                 # wrapper chart; pins the longhorn dependency version
 ├── values.yaml                # config under the `longhorn:` subchart key
+├── templates/
+│   └── recurring-jobs.yaml     # RecurringJob `prod-backup` + StorageClass `longhorn-prod`
 ├── README.md
 └── argocd/
     └── longhorn.yaml           # ArgoCD Application (release name == longhorn, prune disabled)
