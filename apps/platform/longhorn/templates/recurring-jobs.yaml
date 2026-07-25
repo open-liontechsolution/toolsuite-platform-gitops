@@ -1,0 +1,70 @@
+{{/*
+Recurring backup job del grupo "prod" + la StorageClass que lo asigna sola.
+
+Por que esto entra en Git (y por que aqui):
+  Los RecurringJob del cluster se crearon a mano desde la UI de Longhorn y tienen
+  nombres autogenerados (c-0xh3u3, c-dhplrn, ...). El resultado, verificado el
+  2026-07-25: de 21 volumenes solo 2 tenian job de backup asignado, y la etiqueta
+  `recurring-job-group.longhorn.io/default: enabled` que llevan los 21 es INERTE
+  porque ningun job de backup reclama el grupo `default`. Es la brecha de
+  juanjocop/k3s-local-apps-manifests#7.
+
+  Longhorn es propiedad de este repo (el split-brain de infra se cierra por dueño
+  unico, ver k3s-local-apps-manifests#8), asi que la definicion del job vive aqui
+  aunque los volumenes sean de apps del homelab.
+
+Nota: el README dice que los RecurringJob se dejaron fuera de Helm a proposito
+para que la adopcion de 1.7.1 fuese un diff inerte. Esa razon caduco: la adopcion
+termino y el chart esta en 1.11.2. Los jobs viejos hechos a mano se quedan donde
+estan (no se importan) para no tocar los dos volumenes que si funcionan hoy.
+*/}}
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: prod-backup
+  namespace: {{ .Release.Namespace }}
+spec:
+  name: prod-backup
+  # Un volumen entra en el backup diario etiquetandolo con
+  #   recurring-job-group.longhorn.io/prod=enabled
+  # No se usa el grupo `default` a proposito: lo llevan TODOS los volumenes,
+  # incluidos los *-dev y *-casa, que no queremos subir a MinIO.
+  groups:
+    - prod
+  task: backup
+  # Diario a las 02:15 UTC. Los jobs manuales existentes corren a las 03:00 y
+  # 10:00; se deja hueco para no solapar el ancho de banda hacia MinIO (que sale
+  # de la LAN al host Proxmox sv2).
+  cron: "15 2 * * *"
+  retain: 7
+  concurrency: 1
+  labels:
+    scope: prod
+---
+{{/*
+La etiqueta de grupo vive en el CR Volume de Longhorn, que no es declarativo en
+ningun repo: si el volumen se recrea (restore, migracion, cambio de PVC), la
+etiqueta se pierde y el volumen deja de respaldarse EN SILENCIO. Ese es justo el
+punto 3 de la issue #7 ("que la asignacion persista").
+
+Esta StorageClass es la respuesta para volumenes NUEVOS: cualquier PVC que la
+pida nace ya dentro del grupo prod. Para los que ya existen no sirve
+—storageClassName es inmutable en un PVC vivo— y por eso los volumenes actuales
+se etiquetan una vez a mano; queda escrito en el runbook del repo de manifiestos.
+*/}}
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: longhorn-prod
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+# Retain, a diferencia de la clase `longhorn` por defecto (Delete): en un volumen
+# marcado como prod, borrar el PVC no debe llevarse el dato por delante.
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+parameters:
+  numberOfReplicas: "3"
+  staleReplicaTimeout: "30"
+  fsType: "ext4"
+  # isGroup: true => reclama el grupo, no un job concreto.
+  recurringJobSelector: '[{"name":"prod","isGroup":true}]'
