@@ -1,1 +1,0 @@
-{{/* cloudflared is deployed as a sidecar via keycloakx.extraContainers — this template is intentionally empty */}}

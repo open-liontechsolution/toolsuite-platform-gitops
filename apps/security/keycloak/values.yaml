@@ -75,8 +75,6 @@ sealedSecret:
     KC_DB_URL_HOST: ""
     KC_DB_URL_PORT: ""
     KC_DB_URL_DATABASE: ""
-    # Cloudflare Tunnel token
-    CLOUDFLARE_TUNNEL_TOKEN: ""
 
 # NetworkPolicy configuration
 networkPolicy:
