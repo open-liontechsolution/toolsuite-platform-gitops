@@ -83,28 +83,10 @@ keycloakx:
     - name: keycloak-data
       mountPath: /opt/keycloak/data
 
-  # Cloudflare Tunnel sidecar for external access
-  extraContainers: |
-    - name: cloudflared
-      image: cloudflare/cloudflared:latest
-      imagePullPolicy: IfNotPresent
-      args:
-        - tunnel
-        - --no-autoupdate
-        - run
-      env:
-        - name: TUNNEL_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: keycloak-admin-credentials
-              key: CLOUDFLARE_TUNNEL_TOKEN
-      resources:
-        requests:
-          cpu: "50m"
-          memory: "64Mi"
-        limits:
-          cpu: "200m"
-          memory: "128Mi"
+  # External access no longer needs a sidecar: keycloak-dev.liontechsolution.com is served
+  # by the cluster-wide shared tunnel (k3s-nonprod, ns cloudflared), which reaches this
+  # release over keycloak-dev-http:80 -> targetPort http -> 8080 — the same origin the
+  # sidecar used to point at over localhost.
 
   # Extra Kubernetes manifests to deploy
   extraManifests:
