@@ -15,7 +15,6 @@ KC_DB_PASSWORD: "<tu password de la base de datos>"
 KC_DB_URL_HOST: "<tu host de la base de datos>"
 KC_DB_URL_PORT: "5432"
 KC_DB_URL_DATABASE: "<tu nombre de la base de datos>"
-CLOUDFLARE_TUNNEL_TOKEN: "<tu token de cloudflare tunnel>"
 ```
 
 ## Comandos para Generar el SealedSecret
@@ -32,7 +31,6 @@ kubectl create secret generic keycloak-credentials \
   --from-literal=KC_DB_URL_HOST='<tu host de la base de datos>' \
   --from-literal=KC_DB_URL_PORT=5432 \
   --from-literal=KC_DB_URL_DATABASE='<tu nombre de la base de datos>' \
-  --from-literal=CLOUDFLARE_TUNNEL_TOKEN='<tu token de cloudflare tunnel>' \
   --namespace=security-dev \
   --dry-run=client -o yaml > /tmp/keycloak-credentials-plain.yaml
 ```
@@ -67,7 +65,6 @@ sealedSecret:
     KC_DB_URL_HOST: "<valor-encriptado>"
     KC_DB_URL_PORT: "<valor-encriptado>"
     KC_DB_URL_DATABASE: "<valor-encriptado>"
-    CLOUDFLARE_TUNNEL_TOKEN: "<valor-encriptado>"
 ```
 
 ## Notas
