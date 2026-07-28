@@ -35,12 +35,20 @@ cluster:
     affinity:
       topologyKey: kubernetes.io/hostname
 
+    # Monitoring: el objeto PodMonitor NO es nuestro. Lo declara
+    # k3s-local-apps-manifests (`prometheus/cnpg/podmonitor.yaml`, ns `monitoring`,
+    # con namespaceSelector sobre data-dev y data-casa), y ya scrapea este pod.
+    # Encenderlo aqui crearia un segundo PodMonitor y duplicaria el scrape.
+    # `prometheusRule` tampoco sirve: las reglas del chart no llevan la etiqueta
+    # `prometheus: prometheus-persistant` y el ruleSelector las ignoraria en
+    # silencio; van a medida en `prometheus/prometheus/rules-cnpg.yaml`.
+    # Explicacion larga en apps/data/cnpg/values.yaml.
     monitoring:
       enabled: false
       podMonitor:
-        enabled: true
+        enabled: false
       prometheusRule:
-        enabled: true
+        enabled: false
 
     initdb:
       database: authentik
@@ -48,10 +56,35 @@ cluster:
       secret:
         name: authentik-postgres-app
 
+  # Backup logico del operator (barmanObjectStore -> MinIO). Aqui vive el auth de
+  # casa: sin esto, un `DROP TABLE` o una corrupcion se lleva por delante los
+  # usuarios de Authentik. Las 3 replicas de Longhorn no cubren ese caso.
+  # Mismo bucket y misma credencial que apps/data/cnpg (sellada aparte, porque el
+  # SealedSecret va atado al namespace). Detalle de cada campo alli.
   backups:
     enabled: false
+    provider: s3
+    endpointURL: "http://192.168.50.100:9000"
+    destinationPath: "s3://cnpg-backup"
+    secret:
+      create: false
+      name: cnpg-backup-s3-creds
+    wal:
+      compression: gzip
+      encryption: ""
+      maxParallel: 1
+    data:
+      compression: gzip
+      encryption: ""
+      jobs: 2
     retentionPolicy: "30d"
-    scheduledBackups: []
+    scheduledBackups:
+      - name: daily-backup
+        # 01:45 UTC, escalonado respecto al de platform-postgres (01:30): los dos
+        # suben al mismo MinIO por la misma LAN.
+        schedule: "0 45 1 * * *"
+        backupOwnerReference: self
+        method: barmanObjectStore
 
 # SealedSecret with the Authentik DB credentials (username/password).
 # The SAME password must also be sealed into the Authentik release secret
@@ -66,3 +99,14 @@ sealedSecret:
     #   echo -n "<db-pass>" | kubeseal --raw --from-file=/dev/stdin --namespace data-casa --name authentik-postgres-app --controller-name sealed-secrets --controller-namespace kube-system
     username: ""
     password: ""
+
+# Credencial S3 del barmanObjectStore (usuario `cnpg-backup` del MinIO). Mismo
+# plaintext que en apps/data/cnpg, sellado para el namespace data-casa.
+# Ver templates/backup-s3-sealedsecret.yaml.
+backupSecret:
+  enabled: false
+  name: cnpg-backup-s3-creds
+  encryptedData:
+    # echo -n "<access-key>" | kubeseal --raw --from-file=/dev/stdin --namespace data-casa --name cnpg-backup-s3-creds --controller-name sealed-secrets --controller-namespace kube-system
+    accessKeyId: ""
+    secretAccessKey: ""

@@ -7,15 +7,12 @@ This directory contains Argo CD Application manifests for deploying CloudNativeP
 ```
 argocd/
 └── clusters/
-    ├── local/
-    │   ├── dev.yaml      # Local development cluster
-    │   ├── qa.yaml       # Local QA cluster
-    │   └── prod.yaml     # Local production cluster
-    └── cloud/
-        ├── dev.yaml      # Cloud development cluster
-        ├── qa.yaml       # Cloud QA cluster
-        └── prod.yaml     # Cloud production cluster
+    └── local/
+        └── dev.yaml      # cnpg-cluster-local-dev -> release platform-postgres-dev, ns data-dev
 ```
+
+Las Applications de `qa`, `prod` y `cloud/*` se borraron en la issue #44: ninguna existía en el clúster y sus
+values de entorno no configuraban nada (ver `../environments/README.md`).
 
 ## Deployment
 
@@ -32,19 +29,8 @@ argocd/
 ### Deploy a Cluster
 
 ```bash
-# Local development
 kubectl apply -f apps/data/cnpg/argocd/clusters/local/dev.yaml
-
-# Local QA
-kubectl apply -f apps/data/cnpg/argocd/clusters/local/qa.yaml
-
-# Local production
-kubectl apply -f apps/data/cnpg/argocd/clusters/local/prod.yaml
-
-# Cloud environments
-kubectl apply -f apps/data/cnpg/argocd/clusters/cloud/dev.yaml
-kubectl apply -f apps/data/cnpg/argocd/clusters/cloud/qa.yaml
-kubectl apply -f apps/data/cnpg/argocd/clusters/cloud/prod.yaml
+argocd app sync cnpg-cluster-local-dev
 ```
 
 ### Verify Deployment
@@ -67,8 +53,13 @@ Each Application manifest includes:
 
 - **Source**: Points to `apps/data/cnpg` chart
 - **Values Files**: Base + environment-specific values
-- **Destination**: Target namespace (data-dev, data-qa, data-prod)
-- **Sync Policy**: Automated for dev/qa, manual for prod
+- **Destination**: namespace `data-dev`
+- **Sync Policy**: automated (prune + selfHeal)
+- **ignoreDifferences**: `/status` del `Cluster`, para que el estado que escribe el operator no genere diff
+
+El `metadata.name` de la Application (`cnpg-cluster-local-dev`) **no** coincide con el `releaseName`
+(`platform-postgres-dev`), y eso es intencionado: el `releaseName` es load-bearing, tiene que seguir siendo el
+del release vivo o los recursos se recrean con otros nombres y los viejos se podan.
 
 ### Example Application
 
@@ -79,7 +70,7 @@ metadata:
   name: cnpg-cluster-local-dev
   namespace: argocd
 spec:
-  project: default
+  project: tools
   source:
     repoURL: https://github.com/your-org/toolsuite-platform-gitops
     path: apps/data/cnpg
@@ -98,9 +89,7 @@ spec:
       selfHeal: true
 ```
 
-## Sync Policies
-
-### Development & QA (Automated)
+## Sync Policy
 
 ```yaml
 syncPolicy:
@@ -108,58 +97,10 @@ syncPolicy:
     prune: true        # Remove resources not in Git
     selfHeal: true     # Auto-sync on drift
     allowEmpty: false
-```
-
-### Production (Manual)
-
-```yaml
-syncPolicy:
-  # No automated section - requires manual sync
   syncOptions:
     - CreateNamespace=true
     - ServerSideApply=true
 ```
-
-To sync production manually:
-
-```bash
-# Via kubectl
-kubectl patch application cnpg-cluster-local-prod -n argocd \
-  --type merge -p '{"operation":{"sync":{}}}'
-
-# Via Argo CD CLI
-argocd app sync cnpg-cluster-local-prod
-
-# Via UI - click "Sync" button
-```
-
-## Creating from Argo CD UI
-
-If you prefer to create Applications from the UI:
-
-1. **General**
-   - Application Name: `cnpg-cluster-local-dev`
-   - Project: `default`
-
-2. **Source**
-   - Repository URL: `https://github.com/your-org/toolsuite-platform-gitops`
-   - Revision: `main`
-   - Path: `apps/data/cnpg`
-
-3. **Helm**
-   - Values Files:
-     - `values.yaml`
-     - `environments/local/dev.yaml`
-   - Release Name: `platform-postgres-dev`
-
-4. **Destination**
-   - Cluster URL: `https://kubernetes.default.svc`
-   - Namespace: `data-dev`
-
-5. **Sync Options**
-   - ✅ Auto-Create Namespace
-   - ✅ Server-Side Apply
-   - ✅ Automated Sync (for dev/qa)
 
 ## Troubleshooting
 
@@ -196,7 +137,18 @@ kubectl get sealedsecret -n data-dev
 
 # Check unsealed Secret
 kubectl get secret platform-postgres-app -n data-dev
+kubectl get secret cnpg-backup-s3-creds -n data-dev   # credencial del backup a MinIO
 ```
+
+### Backup failing / ContinuousArchiving en False
+
+```bash
+kubectl -n data-dev get backup -o custom-columns='NAME:.metadata.name,PHASE:.status.phase,ERROR:.status.error'
+kubectl -n data-dev get cluster platform-postgres-dev \
+  -o jsonpath='{.status.conditions[?(@.type=="ContinuousArchiving")]}'
+```
+
+Lo primero que hay que descartar es que el Secret `cnpg-backup-s3-creds` no se haya desellado.
 
 ## References
 
