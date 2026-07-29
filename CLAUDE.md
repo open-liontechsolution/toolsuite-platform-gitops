@@ -118,6 +118,12 @@ duplicated and pruned.
   second pod `Pending`.
 - Argo CD Applications use `ignoreDifferences` to suppress noisy diffs (CRD `caBundle`, CNPG
   `/status`, Keycloak StatefulSet `/spec/replicas`). Preserve these when editing Applications.
+- **`cnpg-cluster-local-dev` has no `automated` sync policy on purpose** — several published apps depend
+  on the databases in `platform-postgres-dev`, so an auto-sync with `prune`/`selfHeal` would push any repo
+  mistake straight at them. After merging a change under `apps/data/cnpg` the Application stays
+  `OutOfSync` until someone syncs it by hand (`argocd app sync cnpg-cluster-local-dev`, or
+  `kubectl -n argocd patch app … -p '{"operation":{"sync":{}}}'`). Do not "fix" it by adding `automated`.
+  `authentik-postgres-local-casa` does sync automatically — the two policies differ deliberately.
 - **Monitoring objects for CNPG are owned by the `k3s-local-apps-manifests` repo**, not this one. Its
   `prometheus/cnpg/podmonitor.yaml` declares the PodMonitor (ns `monitoring`, `namespaceSelector` over
   `data-dev` + `data-casa`) and `prometheus/prometheus/rules-cnpg.yaml` the alert rules. Keep

@@ -54,7 +54,7 @@ Each Application manifest includes:
 - **Source**: Points to `apps/data/cnpg` chart
 - **Values Files**: Base + environment-specific values
 - **Destination**: namespace `data-dev`
-- **Sync Policy**: automated (prune + selfHeal)
+- **Sync Policy**: **manual, sin `automated`** — ver abajo
 - **ignoreDifferences**: `/status` del `Cluster`, para que el estado que escribe el operator no genere diff
 
 El `metadata.name` de la Application (`cnpg-cluster-local-dev`) **no** coincide con el `releaseName`
@@ -84,23 +84,45 @@ spec:
     server: https://kubernetes.default.svc
     namespace: data-dev
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
+    # sin automated: ver "Sync Policy"
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
 ```
 
 ## Sync Policy
 
+**Esta Application NO lleva `automated`, y no es un olvido.** El cluster aloja las bases de datos de las que
+dependen varias aplicaciones publicadas (`deal_tracker_qa`, `keycloak_dev`, `tradingtool-{dev,qa}`). Un
+auto-sync con `prune` + `selfHeal` desplegaría cualquier error del repo directamente contra ellas, sin nadie
+mirando. La ventana de revisión manual es deliberada.
+
 ```yaml
 syncPolicy:
-  automated:
-    prune: true        # Remove resources not in Git
-    selfHeal: true     # Auto-sync on drift
-    allowEmpty: false
   syncOptions:
     - CreateNamespace=true
     - ServerSideApply=true
+  retry:
+    limit: 5
+    backoff: { duration: 5s, factor: 2, maxDuration: 3m }
 ```
+
+El sync se lanza a mano, después de mirar el diff:
+
+```bash
+argocd app diff cnpg-cluster-local-dev --local apps/data/cnpg
+argocd app sync cnpg-cluster-local-dev
+
+# sin la CLI de argocd
+kubectl -n argocd patch app cnpg-cluster-local-dev --type merge -p '{"operation":{"sync":{}}}'
+```
+
+`authentik-postgres-local-casa` **sí** va en automático (`apps/data/authentik-postgres`): es el auth de casa,
+no tiene dependientes externos y el coste de un rollback es otro. Los dos criterios conviven a propósito; no
+"unifiques" uno con el otro.
+
+Corolario práctico: tras mergear un cambio en `apps/data/cnpg`, la Application se queda **`OutOfSync` hasta que
+alguien la sincroniza**. Eso es el comportamiento correcto, no un fallo de Argo.
 
 ## Troubleshooting
 
