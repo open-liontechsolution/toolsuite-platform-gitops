@@ -130,6 +130,11 @@ duplicated and pruned.
   in-tree barman support is deprecated and disappears in CNPG **1.31** (operator is on 1.28.1); migrating
   to the `barman-cloud` CNPG-I plugin is pending. Longhorn volume backups are not a substitute — they
   cover disk loss, not a bad `DELETE`.
+- **The MinIO side of those backups lives in `kxs-ansible`, not here** (`roles/minio_creds`,
+  `playbooks/minio_creds.yml`, `docs/MINIO_CREDS.md`): bucket, policy, user, and the plaintext in its
+  encrypted vault. That playbook also runs kubeseal and drops the four ciphertexts in
+  `out/cnpg-backup-s3-creds.yaml` for pasting here. Do not create MinIO credentials by hand — that is
+  exactly how `longhorn-backup` cost 49 days of silent backup failure.
 
 ## Docs map
 

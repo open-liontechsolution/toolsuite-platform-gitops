@@ -48,8 +48,10 @@ Misma configuración que `apps/data/cnpg` (MinIO `http://192.168.50.100:9000`, b
 (01:30) — los dos suben al mismo host por la misma LAN. CNPG separa los dos clusters dentro del bucket por
 `serverName`, así que la ruta acaba siendo `s3://cnpg-backup/authentik-postgres-casa/`.
 
-La credencial S3 es el **mismo plaintext** que en `data-dev`, pero el ciphertext es distinto: un SealedSecret
-va atado a namespace + nombre.
+El bucket, la policy y el usuario los gestiona `kxs-ansible` (`roles/minio_creds`,
+[#47](https://github.com/juanjocop/kxs-ansible/pull/47)), no este repo. La credencial S3 es el **mismo
+plaintext** que en `data-dev`, pero el ciphertext es distinto y no son intercambiables: un SealedSecret va
+atado a namespace + nombre.
 
 ```bash
 echo -n "<access-key>" | kubeseal --raw --from-file=/dev/stdin --namespace data-casa --name cnpg-backup-s3-creds --controller-name sealed-secrets --controller-namespace kube-system
@@ -58,7 +60,8 @@ echo -n "<secret-key>" | kubeseal --raw --from-file=/dev/stdin --namespace data-
 
 Va a `backupSecret.encryptedData` de `environments/local/casa.yaml`. Ese `enabled` y el de
 `cluster.backups.enabled` se encienden a la vez: con backups activos y sin Secret, el archivado de WAL falla y
-el Cluster se queda con `ContinuousArchiving` en `False`.
+el Cluster se queda con `ContinuousArchiving` en `False`. Al rotar hay que re-pegar en **los dos** ficheros
+(`kxs-ansible/docs/MINIO_CREDS.md`).
 
 Comprobación y detalle de restauración: `apps/data/cnpg/README.md`, sección Backups.
 

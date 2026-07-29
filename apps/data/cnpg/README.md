@@ -244,8 +244,17 @@ de daño acotado.
 
 ### Alta y rotación de la credencial
 
-El bucket y el usuario se crean **a mano en MinIO** (no hay GitOps de MinIO). Después, sellar la credencial una
-vez por namespace — un SealedSecret va atado a namespace + nombre:
+**El bucket, la policy y el usuario NO se crean aquí ni a mano**: los gestiona `kxs-ansible`
+(`roles/minio_creds` + `playbooks/minio_creds.yml`, [#47](https://github.com/juanjocop/kxs-ansible/pull/47)),
+que es el repo dueño del host `docker-sv2`. El plaintext vive en su vault cifrado
+(`vault_minio_cnpg_backup_secret_key`). Se hizo así por la lección de `longhorn-backup`: se creó a mano y fuera
+de Git, y cuando dejó de valer nadie sabía cuál era la buena — 49 días de backups caídos
+([k3s-local-apps-manifests#7](https://github.com/juanjocop/k3s-local-apps-manifests/issues/7)).
+
+La playbook también sella, en su paso `--tags seal`, y deja los 4 ciphertexts en
+`out/cnpg-backup-s3-creds.yaml`. Lo único que se hace en este repo es pegarlos. El sellado equivalente a mano,
+si hiciera falta — un SealedSecret va atado a namespace + nombre, así que la misma credencial se sella **dos
+veces**, una por namespace:
 
 ```bash
 echo -n "<access-key>" | kubeseal --raw --from-file=/dev/stdin \
@@ -257,11 +266,20 @@ echo -n "<secret-key>" | kubeseal --raw --from-file=/dev/stdin \
 ```
 
 La salida va a `backupSecret.encryptedData.{accessKeyId,secretAccessKey}` de
-`environments/local/dev.yaml`. La **misma** credencial hay que sellarla otra vez contra `data-casa` para
-`apps/data/authentik-postgres`.
+`environments/local/dev.yaml`, y la del namespace `data-casa` a `apps/data/authentik-postgres`.
 
-`cluster.backups.enabled` y `backupSecret.enabled` se encienden **a la vez**: con el primero a true y sin el
-Secret, el archivado de WAL falla y el Cluster se queda con la condición `ContinuousArchiving` en `False`.
+`cluster.backups.enabled` y `backupSecret.enabled` se encienden **a la vez y en el mismo commit que el
+ciphertext**: con el primero a true y sin el Secret, el archivado de WAL falla y el Cluster se queda con la
+condición `ContinuousArchiving` en `False`.
+
+Para **rotar**: clave nueva en el vault, re-ejecutar la playbook (detecta que la del vault ya no coincide con
+MinIO y la reescribe) y re-pegar los ciphertexts en los dos ficheros. Mientras ese commit no esté sincronizado
+los backups fallan con `SignatureDoesNotMatch`, así que conviene hacerlo fuera del horario de los backups
+programados. Procedimiento completo en `kxs-ansible/docs/MINIO_CREDS.md`.
+
+Un detalle de la playbook que confunde: con el sellado incluido siempre sale `changed=1`. **kubeseal no es
+determinista** (cada sellado usa una clave de sesión aleatoria), así que el fichero de `out/` se reescribe
+aunque el plaintext sea el mismo. Eso no es drift y no hay que re-pegar nada.
 
 ### Comprobar que funciona
 
