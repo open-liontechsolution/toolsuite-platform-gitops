@@ -23,10 +23,23 @@ spec:
     namespace: data-dev
   
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-      allowEmpty: false
+    # SIN `automated`, a proposito. No es un olvido.
+    #
+    # Este cluster aloja las bases de datos de las que dependen varias
+    # aplicaciones publicadas (deal_tracker_qa, keycloak_dev,
+    # tradingtool-{dev,qa}). Un auto-sync con prune+selfHeal desplegaria
+    # cualquier error del repo directamente contra ellas, sin nadie mirando.
+    # La ventana de revision manual es deliberada.
+    #
+    # El sync se lanza a mano tras revisar el diff:
+    #   argocd app diff cnpg-cluster-local-dev --local apps/data/cnpg
+    #   argocd app sync cnpg-cluster-local-dev
+    # o, sin la CLI:
+    #   kubectl -n argocd patch app cnpg-cluster-local-dev --type merge \
+    #     -p '{"operation":{"sync":{}}}'
+    #
+    # `authentik-postgres-local-casa` SI va en automatico: es el auth de casa,
+    # no tiene dependientes externos y el coste de un rollback es otro.
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
