@@ -104,13 +104,12 @@ cluster:
   # Backup logico a MinIO. Forma completa (endpoint, bucket, horario, retencion)
   # en el values.yaml base; aqui solo el interruptor.
   #
-  # PENDIENTE: sigue en false porque falta crear el bucket `cnpg-backup` y su
-  # usuario en el MinIO de sv2 y sellar la credencial (backupSecret, abajo).
-  # Encender los dos flags A LA VEZ y en el mismo commit que el ciphertext: con
-  # backups.enabled: true y sin Secret, el archivado de WAL falla y el Cluster se
-  # queda con ContinuousArchiving en False.
+  # Va atado a `backupSecret` de mas abajo: los dos flags se encienden a la vez y
+  # en el mismo commit que el ciphertext. Con backups.enabled: true y sin Secret,
+  # el archivado de WAL falla y el Cluster se queda con ContinuousArchiving en
+  # False.
   backups:
-    enabled: false
+    enabled: true
 
 # SealedSecret configuration for local dev
 # IMPORTANT: Replace these placeholder values with actual encrypted secrets
@@ -124,24 +123,28 @@ sealedSecret:
     username: "AgBRsEWrHhffQq0slDQmsJvGs8bgatFLHKufxEVi19T59OL8ypgzdFIpkHtC5mWPruuVcznx0UqgCXZnkmnaXDoFETTMlXrcEPYSCQMbcp2Uld0M7aM2Q39/7VDBlbj3qZG4IlCI8kCvXKiF3dyGEXrmoHyLjTaXz4DLgup7CZPt6R6DV1dQ7uGxkjerw+JBNxxuVYmuUaT7cVyXWL79si9a6e7e332Q3koWG66+4oO1DMmEgBC35rIDuJMEfQpFRsOsVzEHLdzZdYLKkZhmBKxDV7K/3tf8kn5DCTFHergZveBh0rOYYyJN0DA5GAIiblN6BYHJ+qxKWnW0y00Qe6SYmJAvMUl7Odj7fUUVzp9nfCDZ2EciDARgK8W3OFmg7Js7j/T3S4GQUi1o5JwNRKM4v5STgGo6twnWosegbMcZ2hTaQkNWIek8N/FTnNTkNtGjzxST7V4QFg64Izk4FZu/w5bBZvX9H78ZEEv1udnTaoOh82BTOPbxlRTJ3CvaJ2oR/IrqTMF0w55vOXS+CJstZPz9ObOxLccw0C84E50vGiWh39jedJc13Z+GZESD27D+AgMrHHm1pf9ygTOVeCX9jFAxyKUCI4oZ0fV5pvX/xUzSTe9BeMULWCOdNRfVqIlEC+zwx67cMct/g88W9NAz6F77FgfNsYERmD6VkEDLEr2WNzEpH/Q+4yPwNh746X87HmrdkxTaonLx2q3PpXMLABmdFA=="
     password: "AgAyrgE9rX1hPF5IgMz9tQ0PZKUhQq+EQc3Vki/a9qu9xnfdKY+FkaEpVWK1+KzzUL8irGJ+IrkgfAbOSpeWnYWo5FBbC4q1O4pCds3YAnM6+5mVZqhaYB09nu99lZi/bhcWvv/GJjntcCGP5mra85483xG/cK+S7cQihokT/gyIcKxSyn3joP595YcvFX/10aFvaY5cfY8/RKtIGCE9rIR6kHtullQ33TTy5XZ347NKLV3AohRQKjhVkL/A1a3PyvlNNXmKAnB1+el5d5QeFGcjrcYxrhPZtTo3fa2BR2+FPX28Tpm1L4gdBuBcZklcQ9KW4Mild0qKkjjs7L1TBAZLNwYO2Di/Q8AcSUicwU1EmiBgmWrfJuCqK8v2tsb7KWZ8nLzt+IrHeOgTtbyhwK9fi9JgX6BOBbij2Fl9Kh5VvlCq4RUV7jPqAd64sWqNmL8tT9F0ce0QlNgj/Rgpkjh0vc0GsDtVjt4MnkfAxFVv1BwE8zmHHTt5HuOOOTFQO0+mN6iSKGGw+Jw66ZaEZPphtPpQ8v+K0q952/ZNZL6DFBeBsqIp4rjS5G2HL8PYs9rQc8/WG1qoYlJBaZPKhSHLh6aFUJYW2cr8OKaNh9VsGZcVbXMkxq7DSbN0IX97bxydElM6jtGp+pPPb6oiKHjkNqXQmYs/VLY1fGHcmt7ftaprHi/SycLopSEzKtSiE4xFiIypZy9wyg=="
 
-# Credencial S3 del backup a MinIO (usuario `cnpg-backup`).
+# Credencial S3 del backup a MinIO: usuario `cnpg-backup`, con policy acotada a
+# ese bucket y nada mas (el rol comprueba con una prueba negativa que NO puede
+# listar `longhorn-backup`).
 #
-# PENDIENTE, va de la mano de cluster.backups.enabled:
-#   1. En el MinIO de sv2: crear el bucket `cnpg-backup` y un usuario con policy
-#      limitada a ese bucket.
-#   2. Sellar las dos mitades de la credencial CONTRA ESTE NAMESPACE:
-#        echo -n "<access-key>" | kubeseal --raw --from-file=/dev/stdin \
-#          --namespace data-dev --name cnpg-backup-s3-creds \
-#          --controller-name sealed-secrets --controller-namespace kube-system
-#        echo -n "<secret-key>" | kubeseal --raw --from-file=/dev/stdin \
-#          --namespace data-dev --name cnpg-backup-s3-creds \
-#          --controller-name sealed-secrets --controller-namespace kube-system
-#   3. Pegar la salida abajo y poner los dos `enabled` a true.
-# La MISMA credencial hay que sellarla otra vez para data-casa, en
-# apps/data/authentik-postgres/environments/local/casa.yaml.
+# El bucket, la policy y el usuario los crea juanjocop/kxs-ansible#47
+# (`roles/minio_creds` + `playbooks/minio_creds.yml`), y el plaintext vive en su
+# vault cifrado (`vault_minio_cnpg_backup_secret_key`), no en la cabeza de nadie:
+# es la leccion de `longhorn-backup`, que se creo a mano fuera de Git y costo 49
+# dias de backups caidos (k3s-local-apps-manifests#7).
+#
+# El ciphertext de aqui esta atado a namespace + nombre (data-dev +
+# cnpg-backup-s3-creds): NO es intercambiable con el de data-casa aunque el
+# plaintext sea el mismo.
+#
+# Para rotar: nueva clave en el vault, re-ejecutar la playbook (detecta el
+# desajuste y la reescribe en MinIO, y vuelve a sellar) y pegar los ciphertexts
+# nuevos en los DOS ficheros. Procedimiento en kxs-ansible/docs/MINIO_CREDS.md.
+# Mientras el paso de pegar no este sincronizado, los backups fallan con
+# SignatureDoesNotMatch: hacerlo fuera del horario de los backups programados.
 backupSecret:
-  enabled: false
+  enabled: true
   name: cnpg-backup-s3-creds
   encryptedData:
-    accessKeyId: ""      # REPLACE: sellado del access key contra data-dev
-    secretAccessKey: ""  # REPLACE: sellado del secret key contra data-dev
+    accessKeyId: "AgBz1690H1TSK+mWMq+a9CvDgqs69P/AsRSUpF0yNMupfx/yIn0hhgV0P3uBs83roIU22EaH8Bj+UO9mtCX7ETQK0BE1FZSXQpf7PcwwuGlWO0gd0K8PkVMkUiBh0WkYHhqiuCSSeOSGp1VwzwHIKcMsxdZWjflHjy9Pt1G93mgcYWXJ/d/WDZpn3OrDBEKI9lyUqeRU0ocP7XpTTtdH3nlIcGUEPEvYin3rrV3HRkRiamA0CZRoyZ5Ts4cpkNq+sSw0kX8vw+L/20MGu8tRAH17AC+Lz4G8fduBzMY3xJm7M/3kNTYzHmcmQYNzbcPTxWAeBCWfsGLHArayR/deXYX2+pcYMNYYSznT9EWRJXihtoCYglXIUTctysbqHqo56FXdI3nDpgTn6sAMBjI+qJNQzq5u3JmgWEgSldOdevXQT3nT2Ux5d6VSibc2uf+yraOUntl9PS6UTXNIQk/CncDGQGWtq7dsLCi6uXIxqkL1m0tdwysgSC36M4j75dZ+AdAKr4Gi9x+pF9kcNDnBn5khaTZKyyhIqyZWJcfjds7VJitCKp/p7UxlqIDzxVRDGKRVzL+NZSNOaCu30fYhaaVM+HPvzTxg9Ctbg42TLnQ73BitvnGrLWtibVBJO7k2PZ/B0+erqgC7SqJ6HK05wwbvNxKR8TpAxlc4M7ds6u4tjKfD0uk1bS/FSN3Ya9mdSmQXYCvDu7/rvwyEmg=="
+    secretAccessKey: "AgAdlNToe/+GPrhVT6Vh1eenUL76/nWW88SZHDd30cv7gh55XT+Dl6up2OF0WFNIlpcEJ2yuEyhG1G9Hyw6JMVOq9SDqT9u/rrHGEZzUL0cX2zvGFjB+VV0BpQR6gRtcp9l8YQxM2eQYACk5fzDmBMNd6uNV8ZtEiFNX+/3SWue9quD/Zs8K2ZgdXtnYQ+79P2dUoCVuzHgPiJnSxj9QOoLYRYjIjyKnk+xYTX5XR3BWPBpBI4U3TsS6SZg7QyJZw9hyUYAKprayCWeAhdnPdMT7Zfk7OTTxxTqn+6ZKR8OE2uCQ7256jqCfIVdNYBeA/McY4zqgXYPuR1hT70+uCussT61bFkRuwr617C6CXpWqWaKxZIFoR2kRFxawTZy/x7b5+Lh/jiBGKUAYFXfzGU0HtfPHBNGoJNB8caI4v2D4yqgmOZE5gR4ezrCAXmrn9cWweFXhvc8n8V72xqphCy6jLbiX8p7b6FUfevsc+FS7jNB6T6QNmOMGsWh7gv5605y8PLLrWYbwLQ3uBdAcj54CbsAkrRl5cUSGAmxVGCnsXT3zOg83vHQd3K98gTG+4zJ9clt8lLkc6YmgcF7UDFxqHsMj8qF7ZbUZyXHlcFkZfH53bRswVbzjKEPjD52948O+Urgnq5W+l0Swome3Z5LQ5qbULp+jlCcr9wRxbr0St2WSb47vh9YqRTLlzU+9ykLeJLmwH/8DJ7a3t9kJC3bD6HFaqkN7ActKHbxlO/E0/5ug6Zrk7/dq"
