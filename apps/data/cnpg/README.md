@@ -283,12 +283,32 @@ aunque el plaintext sea el mismo. Eso no es drift y no hay que re-pegar nada.
 
 ### Comprobar que funciona
 
+**`ContinuousArchiving: True` NO es prueba de nada.** CNPG arranca con `archive_mode=on` siempre, y esa
+condición ya estaba en `True` en los dos clusters *meses antes* de que existiera ningún destino configurado
+(`lastTransitionTime` de febrero y junio de 2026, con los backups encendidos el 29-07). No distingue "archivo
+bien" de "no tengo dónde archivar". No la uses como criterio de éxito.
+
+Lo que sí lo prueba, en orden:
+
 ```bash
-kubectl -n data-dev get secret cnpg-backup-s3-creds     # lo desella el controller
-kubectl -n data-dev get scheduledbackup
-kubectl -n data-dev get backup -o custom-columns='NAME:.metadata.name,PHASE:.status.phase,ERROR:.status.error'
+# 1. El Secret se ha desellado (si falta, todo lo demás falla)
+kubectl -n data-dev get secret cnpg-backup-s3-creds
+
+# 2. El Backup ha terminado, y sin error
+kubectl -n data-dev get backups.postgresql.cnpg.io \
+  -o custom-columns='NAME:.metadata.name,PHASE:.status.phase,ERROR:.status.error'
+#    OJO: `kubectl get backup` a secas resuelve a backup.longhorn.io, no a CNPG.
+
+# 3. El operator reconoce un punto de restauración — este campo es de fiar
 kubectl -n data-dev get cluster platform-postgres-dev \
-  -o jsonpath='{.status.conditions[?(@.type=="ContinuousArchiving")]}'
+  -o jsonpath='{.status.firstRecoverabilityPoint}{"  ultimo: "}{.status.lastSuccessfulBackup}{"\n"}'
+
+# 4. La prueba final: que barman vea el backup en el bucket
+AK=$(kubectl -n data-dev get secret cnpg-backup-s3-creds -o jsonpath='{.data.ACCESS_KEY_ID}' | base64 -d)
+SK=$(kubectl -n data-dev get secret cnpg-backup-s3-creds -o jsonpath='{.data.ACCESS_SECRET_KEY}' | base64 -d)
+kubectl -n data-dev exec platform-postgres-dev-1 -c postgres -- \
+  env AWS_ACCESS_KEY_ID="$AK" AWS_SECRET_ACCESS_KEY="$SK" AWS_REGION=us-east-1 \
+  barman-cloud-backup-list --endpoint-url http://192.168.50.100:9000 s3://cnpg-backup platform-postgres-dev
 ```
 
 El `ScheduledBackup` se crea con `immediate: true`, así que el primer backup arranca al sincronizar, sin
