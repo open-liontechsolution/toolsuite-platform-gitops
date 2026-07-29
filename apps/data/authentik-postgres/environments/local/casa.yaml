@@ -11,7 +11,11 @@ cluster:
   cluster:
     imageName: ghcr.io/cloudnative-pg/postgresql:16.4
 
-    # Single instance for a home deployment
+    # Una sola instancia, a proposito.
+    # Subir a 2 dejaria el segundo pod en Pending: la nodeAffinity de mas abajo
+    # exige worker AND performance=high y `worker4` es el unico worker con esa
+    # etiqueta. Ver la nota larga en apps/data/cnpg/environments/local/dev.yaml.
+    # La recuperacion de este cluster es por backup, no por failover.
     instances: 1
 
     # Storage configuration for Longhorn
@@ -86,6 +90,13 @@ cluster:
         min_wal_size: "128MB"
         max_wal_size: "512MB"
 
+  # Backup logico a MinIO. Forma completa en el values.yaml base.
+  # Va atado a `backupSecret` de mas abajo: los dos flags se encienden a la vez y
+  # en el mismo commit que el ciphertext; con backups.enabled y sin Secret, el
+  # archivado de WAL falla.
+  backups:
+    enabled: true
+
 # SealedSecret configuration for the "casa" environment.
 # IMPORTANT: Replace the placeholders with real encrypted values before syncing:
 #   echo -n "authentik"  | kubeseal --raw --from-file=/dev/stdin --namespace data-casa --name authentik-postgres-app --controller-name sealed-secrets --controller-namespace kube-system
@@ -97,3 +108,22 @@ sealedSecret:
   encryptedData:
     username: "AgAGkc2N+2ucRjMhm9Riqk7l6zy/kS//ShqBZqx/5IiyOQps0/Kz/PIZALLYtA1jAUxdV2T1613DyvDdiJfxiSuIya0jk/MkNsVjM9GvNcT3d6qjISHFRSqymUwRasEGBksiBEanihsrR7sEqX6ggeXMEUEygPkMFyxOacfTVPheewGthsZVY3If1yvQuvSyKBIrHk/pkbdplmYB4xN5AUINgMBp7FO031R6Dgt/Vg8K4IfsiDbpDng46E7wo/JLAD21ZtR7ONgSFLbGYkADRVmZoWIH56gAqD8j6GmSu9/M4x81DoYjmGWFbnlwNxxQnSa1MqcV3gTWrFJXaeuHVyTUIDak7C51V9/MWBYF3S9s1QieaqWMBQCcAZzTMdYZsTeCKCVxaM11bM6sytynIWlBTUOH7YIHZ/3kxygFFSIrTRxBE5S0FKnDYSPJBGJlic2z6mc204ba+oHXPDqNCUynIHBaUcJK9jlkGc4I56kXg9lo8D11p16KROculHKaMW8ce0RVut2VdeGNxWgtb/BqJQDKNue4XxNuII5fVV4cj5IlPtuWz0bIU/g1dnHL5ZbqoZgzvEnETSFiFbpot0pySa3MbX/grVK6wTbeb9BJMIUGViSuZmERFhKovNyOnvXQ5Rl6bbRoPBvAseG3lTaO0t+Oaxyq9CuBAFNkea9ptS3/pVRMIn1yn9KxJVBzmNmhmIjUxSQcahs="  # REPLACE: sealed "authentik"
     password: "AgCKouo7JPJh26kYrr5viHAyV+IKCYw9PlWyflgfyakCLWEgqy9rvJhjsDRqZFNTNdoO3a94LiD8EZH/uq8YSKE/e7BEpHJIEyxgxvC1/XFLvCAaB8jYy8CogMm7/lYPnPwRaQSSU1etwt5JXzBCR7CtjRGmU+I3ZLnD1C3eaekvlDRrdFQ1URAb4FQid5rZHiC9nOm+4y5ZI49SU2UlKvQP4Ux8ZdvE28+c2V6/NiEM3MQcGZ7pJ4qY5FT46zQQB4mpIahdnpZfUkG00kCZys1QutdJPfZlRAPFzWoptj4P8RSbHqja/84zwwnwhXfgdVtAwaYh3oBKXjmndMFwp3E/6mbm+nFnlYckRprv0hmAPEFhLF5Wts6vWw7v+hjF69fEBfPY262aWjkoa7bcLbvBR4L9POaR4Ijvg2w7TYTRG42Vzwy/s8Mr+NPgCPP1CjYsFDUf+Qz/6Y9vxpjytNSodvQt2z1RAKNq1HQzXKDKzEkMDYp2BLOgp74z0FKceTu7yb1dcBsi9v3xLJys7wUNH1d/6C6N8a1U3ErzHqZto/61t5f0MCd2lW2RKlXD3cp8A9fGowhYMkTz7E+m+1TeZGEVqOtHoJ5wUQMjWt8e0KOehO9WzwKfuNo/9JtQs3bcsa+PybY/LFcflRLKapkoSomTYRR3g67DZQ4wxWjKP5zOmy+ztiQWpopA1kW6vHEi7G0Nh21c2d6e8qo1qFpthE7UIw=="  # REPLACE: sealed db password (same plaintext as Authentik's AUTHENTIK_POSTGRESQL__PASSWORD)
+
+# Credencial S3 del backup a MinIO: usuario `cnpg-backup`, compartido con
+# platform-postgres-dev. Los dos clusters escriben en el mismo bucket sin
+# pisarse porque CNPG cuelga cada uno de su propio serverName
+# (s3://cnpg-backup/authentik-postgres-casa/...).
+#
+# Es el MISMO plaintext que en apps/data/cnpg/environments/local/dev.yaml, pero
+# el ciphertext es distinto y NO son intercambiables: un SealedSecret va atado a
+# namespace + nombre, y este esta sellado contra data-casa.
+#
+# El bucket, la policy y el usuario los crea juanjocop/kxs-ansible#47; el
+# plaintext vive en su vault cifrado. Rotacion en kxs-ansible/docs/MINIO_CREDS.md
+# — hay que re-pegar los ciphertexts en los DOS ficheros.
+backupSecret:
+  enabled: true
+  name: cnpg-backup-s3-creds
+  encryptedData:
+    accessKeyId: "AgB01/fDhTcCcf+gYGz10tDB5DfkeCA6nreSLu45G0f7g6IwJUA2YgelTYDCBb/vDtWh+sGu51jcCtAh3ZyYTxji0IwdBhtYnc5sTjQy0+yq+H3Ob9lJQ7JistsdmqlKNoHSSwLI2vASIVXx2zSnHPircaD/B/rJiI8hl5qkjEpMv0so/yl7VmRQxyWs/lerFMYbhgFsghEyumFFxme2CtnqW59wZe1u7NTjtcIgrOcx33Wnb4lcHsi43OlHMeSnUAx41NmZ9DJcbw3aepoNNfoffWaHFNMP0e/YJOgPiqLAaxjgUFF9c7MhXHBW0S8N9GJUa4+AlL7wuJ46oZ9A71qqRMC1TsdKR2vXna0B0U8b0ihH/Vo3bMGSYkVJB29SLFDUP5O9EMAWt0751DdfWdMmQ7C4c/GA2klaoMZTLz3lDjEzZyU8kkL7gEDu6YF6NYm2RdESu8BJauNQg4mo/fHlI+VIKdjO6EK8w742dmnCSqDtU+MUY7ovaWf09iNAagBvUpMntKSeb4x7J5c+xvu6hEsFpZQtms+vDK2oNaxyeLPoKbngZXY183rKwa/KmzFycoKoIEd5840PenD2wtMM1GemHO7eePx6PZXbpV4Ey4Npz4BWr8dPgJBegARkT4yiQqchFOY68joz1V8mutDbLEw0nr/iyjF9H8Y/wEjdRF+KrEGJDAFtBCUgFqjUrYi8V/aGkw2eIpTZOQ=="
+    secretAccessKey: "AgCuQesumBDI9Hd0ttp60yeQhQMNLCYXaopts5qzkTmLbjcf3ELWG47B8utoLwMUDpQezglj042MLVtvBXxi8xmK25c5uUB4ENezfcKMLXhThrKnQGshxc5rLVD9EuVZzzKnIg1cAK8prdybXcDJWncigsSKnux4dOBYsfBVHNA7kstk5jKJofLJDPtkgP76weB4tF4FEQV/FeBHnOTjlM0vlMgbHlRwAdFisiMthqvpKzlRN930S7y04SL0w9fTEkvizcVqIG5W/zkA20GVnNoJhwn5GCWemPteHR5TUxbQJUmiCAqf8kZTbOYQkdYEwqj2h9ouHivlyL156LDWgWsOjea3bEf/AFXTZt1t7bv5nsJ9LT0T+pDG6tuwyx2qVN/Ztiys0WvndLqwzmKHz5vyZHH0ABAaXHP/TRQlIvpngT49PsjpkCByzyBweuaBadInI8wVhZcFKYFcM38YAA2TOaLW9lWYVedAUbemu6Fq9xNGawl+W7J6tsBBZePHudpfWMDW1LUrjRQDBHFIK6IzFyeOBtG35kS62II3nOt6vHfoWaHFyC1wbI/mMnKgtv9I3ogl44eHy1L0NDosNHFwV0+2wqqK8Iw3ojgykRVL9iMEjEHraGCrLl1DNUaL5/wviH5VzL/+xkgGUJ6cuYCSMt8HL1MiKawpJKheMweXILPDaOZDT2XJMH3fvWwjgF0QrbfbBqzMRMuXbZaKY7968fJac1gGPCrTDsD9FZJBk3A4AlR9p2kV"

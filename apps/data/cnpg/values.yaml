@@ -31,12 +31,32 @@ cluster:
     affinity:
       topologyKey: kubernetes.io/hostname
 
+    # Monitoring: el objeto PodMonitor NO es nuestro.
+    #
+    # Lo declara k3s-local-apps-manifests en `prometheus/cnpg/podmonitor.yaml`
+    # (ns `monitoring`, con namespaceSelector sobre data-dev y data-casa), y esta
+    # verificado en vivo: los dos pods se scrapean. Se hizo alli porque el
+    # exporter ya servia metricas pese a tener esto apagado — `.spec.monitoring`
+    # del Cluster no depende de este flag, el 9187 devuelve 518 series `cnpg_` —
+    # asi que lo unico que faltaba era quien declarase el objeto.
+    # Encender `podMonitor` aqui crearia un SEGUNDO PodMonitor y el scrape saldria
+    # duplicado. Si algun dia queremos ser dueños del objeto, primero se borra el
+    # del otro repo y luego se enciende esto; en ese orden.
+    #
+    # `prometheusRule` tampoco sirve: las reglas que genera el chart no llevan la
+    # etiqueta `prometheus: prometheus-persistant` y el `ruleSelector` de nuestro
+    # Prometheus las ignoraria en silencio. Las reglas estan escritas a medida en
+    # `prometheus/prometheus/rules-cnpg.yaml` del repo de manifiestos.
+    #
+    # Los dos sub-flags van a false explicitamente, y no solo el master switch:
+    # asi encender `monitoring.enabled` (p.ej. para meter customQueries) no
+    # arrastra de rebote el PodMonitor duplicado.
     monitoring:
       enabled: false
       podMonitor:
-        enabled: true
+        enabled: false
       prometheusRule:
-        enabled: true
+        enabled: false
 
     initdb:
       database: platform
@@ -44,11 +64,61 @@ cluster:
       secret:
         name: platform-postgres-app
 
+  # Backup logico del operator (barmanObjectStore -> MinIO).
+  #
+  # Las 3 replicas de Longhorn protegen de perder un disco, NO de un `DROP TABLE`
+  # ni de una corrupcion. Este es el unico backup real de los datos.
+  #
+  # `enabled` se enciende en el values de entorno, junto con `backupSecret`: sin
+  # la credencial sellada el archivado de WAL falla y el Cluster se queda con la
+  # condicion ContinuousArchiving en False.
+  #
+  # Nota de caducidad: el barmanObjectStore in-tree esta deprecado desde CNPG 1.26
+  # y desaparece en 1.31 (vamos por 1.28.1). La migracion al plugin barman-cloud
+  # (CNPG-I) va en issue aparte; implica subir el chart `cluster` 0.6.1 -> 0.8.x y
+  # traducir este bloque a un CR ObjectStore.
   backups:
     enabled: false
-    retentionPolicy: "30d"
-    scheduledBackups: []
+    provider: s3
 
+    # MinIO por LAN, igual que el BackupTarget de Longhorn: los fallos de junio
+    # (k3s-local-apps-manifests#7) fueron 502 del proxy que lo fronta. Menos
+    # saltos en el camino de los backups.
+    endpointURL: "http://192.168.50.100:9000"
+
+    # Bucket dedicado, distinto del `longhorn-backup`: credencial separada y
+    # retencion independiente. CNPG cuelga cada cluster de su propio serverName
+    # (= nombre del Cluster), asi que los dos clusters comparten bucket sin
+    # pisarse: s3://cnpg-backup/platform-postgres-dev/...
+    destinationPath: "s3://cnpg-backup"
+
+    secret:
+      # El Secret lo pone templates/backup-s3-sealedsecret.yaml. El del subchart
+      # exigiria las claves en claro en values (backups.s3.accessKey).
+      create: false
+      name: cnpg-backup-s3-creds
+
+    wal:
+      compression: gzip
+      # Sin SSE: el MinIO de sv2 no lo tiene configurado y el AES256 que trae el
+      # chart por defecto haria fallar cada PUT del archivado.
+      encryption: ""
+      maxParallel: 1
+    data:
+      compression: gzip
+      encryption: ""
+      jobs: 2
+
+    retentionPolicy: "30d"
+
+    scheduledBackups:
+      - name: daily-backup
+        # Formato CNPG de 6 campos (el primero son segundos): 01:30 UTC. Se deja
+        # por delante del prod-backup de Longhorn (02:15) para no solapar el
+        # ancho de banda hacia el mismo host.
+        schedule: "0 30 1 * * *"
+        backupOwnerReference: self
+        method: barmanObjectStore
 
 
 # SealedSecret configuration
@@ -62,3 +132,14 @@ sealedSecret:
     # Example: echo -n "platform" | kubeseal --raw --from-file=/dev/stdin --namespace data-dev --name platform-postgres-app
     username: ""  # Encrypted username (set in environment values)
     password: ""  # Encrypted password (set in environment values)
+
+# Credencial S3 del barmanObjectStore de arriba (usuario `cnpg-backup` del MinIO).
+# Ver templates/backup-s3-sealedsecret.yaml. Se enciende en el values de entorno,
+# a la vez que cluster.backups.enabled.
+backupSecret:
+  enabled: false
+  name: cnpg-backup-s3-creds
+  encryptedData:
+    # echo -n "<access-key>" | kubeseal --raw --from-file=/dev/stdin --namespace data-dev --name cnpg-backup-s3-creds --controller-name sealed-secrets --controller-namespace kube-system
+    accessKeyId: ""
+    secretAccessKey: ""
