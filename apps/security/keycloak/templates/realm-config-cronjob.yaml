@@ -1,0 +1,32 @@
+{{- if and .Values.realmConfig.enabled .Values.realmConfig.reconcile.enabled }}
+{{- /*
+  Reconciliacion periodica: esto es lo que convierte "declarado en git" en "se revierte
+  solo", que es el criterio de aceptacion de la issue #49. Consecuencia a tener presente:
+  un arreglo hecho con kcadm.sh dura como mucho hasta la siguiente pasada. A partir de
+  aqui, un webOrigins roto se arregla en un PR.
+*/}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "keycloak.realmConfig.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "keycloak.realmConfig.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.realmConfig.reconcile.schedule | quote }}
+  timeZone: {{ .Values.realmConfig.reconcile.timeZone | quote }}
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.realmConfig.backoffLimit }}
+      ttlSecondsAfterFinished: {{ .Values.realmConfig.ttlSecondsAfterFinished }}
+      template:
+        metadata:
+          labels:
+            {{- include "keycloak.realmConfig.labels" . | nindent 12 }}
+        spec:
+          {{- include "keycloak.realmConfig.podSpec" . | nindent 10 }}
+{{- end }}

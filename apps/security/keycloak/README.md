@@ -28,8 +28,15 @@ Keycloak is a high-performance Java-based identity and access management solutio
 | Environment | Namespace     | Replicas | CPU Request | Memory Request | Database                    |
 |-------------|---------------|----------|-------------|----------------|-----------------------------|
 | **dev**     | security-dev  | 1        | 250m        | 512Mi          | keycloak_dev @ data-dev     |
-| **qa**      | security-qa   | 2        | 500m        | 1Gi            | keycloak_qa @ data-qa       |
-| **prod**    | security-prod | 2        | 1           | 2Gi            | keycloak_prod @ data-prod   |
+
+**dev es el unico entorno que existe.** Hubo values y Applications de `qa` y `prod` desde el commit
+inicial, nunca desplegados y que no habrian funcionado: anidaban bajo `keycloak:` cuando el subchart
+es `keycloakx`, apuntaban a `data-prod`/`data-qa` (namespaces que no existen) y llevaban
+`REPLACE_WITH_ENCRYPTED_*` en los secretos. Se borraron; escribirlos de nuevo cuando hagan falta
+cuesta menos que confiar en ellos.
+
+El prod de deal-tracker no necesita una instancia nueva: estrena **realm** propio en esta, declarado
+en `realms/`. Ver la issue #50.
 
 ## Database Setup
 
@@ -165,20 +172,6 @@ helm upgrade --install keycloak-dev . \
   --create-namespace \
   --values values.yaml \
   --values environments/local/dev.yaml
-
-# Local QA environment
-helm upgrade --install keycloak-qa . \
-  --namespace security-qa \
-  --create-namespace \
-  --values values.yaml \
-  --values environments/local/qa.yaml
-
-# Local prod environment
-helm upgrade --install keycloak-prod . \
-  --namespace security-prod \
-  --create-namespace \
-  --values values.yaml \
-  --values environments/local/prod.yaml
 ```
 
 ### Using Argo CD
@@ -421,18 +414,65 @@ helm dependency update
 helm upgrade keycloak-dev . --namespace security-dev
 ```
 
-## Multi-Tenancy (Future)
+## Realms declarados en git
 
-This Keycloak deployment is designed for multi-tenant use:
+Los realms y sus clients se declaran en `realms/*.yaml` y los aplica
+[keycloak-config-cli](https://github.com/adorsys/keycloak-config-cli). Antes vivian solo en la
+Postgres de Keycloak, asi que un cambio hecho a mano no dejaba rastro en ningun diff — que es como
+un `webOrigins` mal puesto tumbo el login de QA de deal-tracker durante una release entera
+(`deal-tracker#219`, issue #49 de este repo).
 
-- **One realm per customer/tenant**
-- **Isolated authentication contexts**
-- **Centralized identity management**
+Esta instancia hospeda varios realms. **config-cli solo entra en los que aparecen en `realms/`**;
+el resto no se toca.
 
-Realm configuration will be added in future updates using:
-- Keycloak Admin API
-- keycloak-config-cli (included in Bitnami chart)
-- Terraform Keycloak provider
+| Realm | Fichero | Consumidor |
+|---|---|---|
+| `deal-tracker-dev` | `realms/deal-tracker-dev.yaml` | el entorno **QA** de deal-tracker (el nombre engana: no hay ninguna redirect URI de dev) |
+| `deal-tracker-prod` | `realms/deal-tracker-prod.yaml` | produccion de deal-tracker, `dealtracker.liontechsolution.com` |
+| `tradingtool-dev`, `tradingtool-qa` | — | sin declarar todavia; config-cli no los toca |
+
+Los dos realms de deal-tracker estan separados a proposito: compartir client es lo que convirtio un
+`webOrigins` mal puesto en una caida de login para todo QA, y con prod dentro habria sido una caida
+de produccion. El `KEYCLOAK_ISSUER_URL` y el `KEYCLOAK_AUDIENCE` de cada entorno viven en
+`deal-tracker/overlays/*/secret.example.yaml` del repo de manifiestos: **el nombre del realm y el del
+client son contrato entre repos**, cambiarlos aqui deja de validar los tokens alli.
+
+### Como se ejecuta
+
+| | Cuando | Para que |
+|---|---|---|
+| `Job` (hook `PostSync`) | En cada sync de la Application | El cambio intencionado |
+| `CronJob` | A diario, 04:00 Europe/Madrid | Revertir cambios hechos a mano |
+
+La Application `keycloak-local-dev` es de sync manual (sin `automated`), asi que el CronJob es lo
+que hace que la reconciliacion no dependa de que alguien sincronice.
+
+**Consecuencia: un arreglo con `kcadm.sh` dura como mucho hasta la siguiente pasada.** A partir de
+aqui, un `webOrigins` roto se arregla en un PR, no en el pod.
+
+### Que se toca y que no
+
+- **Los usuarios no se tocan nunca.** keycloak-config-cli no sabe borrarlos: `UserImportService`
+  registra `"Purging users isn't supported in keycloak-config-cli!"` incluso si se le pasa
+  `users: []`. Y los ficheros de `realms/` no declaran usuarios, asi que el importador ni entra.
+  El auto-registro de usuarios es seguro frente al CronJob.
+- **Lo no declarado se queda como esta**, con `import.managed.*=no-delete` (ver `values.yaml`).
+  Comprobado sobre un realm de prueba: un ajuste de realm que el fichero no menciona sobrevive a la
+  reconciliacion.
+- **`import.cache.enabled=false` es deliberado.** Por defecto config-cli cachea un checksum del
+  fichero y se salta la aplicacion si no cambio; como el fichero solo cambia en un commit, eso
+  dejaria al CronJob sin efecto ninguno frente a un cambio hecho a mano.
+
+### Anadir o cambiar un realm
+
+1. Editar o crear el fichero en `realms/`.
+2. Renderizar: `helm template keycloak-dev . -f values.yaml -f environments/local/dev.yaml`.
+   El template **rechaza en tiempo de render** cualquier `webOrigins` con ruta o con `/*`: Keycloak
+   compara la cabecera `Origin`, que nunca lleva ruta, y con `/*` no casa nunca.
+3. PR, merge, y `argocd app sync keycloak-local-dev`.
+
+Los secretos no van aqui en claro: el chart ya usa sealed-secrets, y los clients declarados son
+publicos (PKCE), sin secreto que guardar.
 
 ## Monitoring and Metrics
 

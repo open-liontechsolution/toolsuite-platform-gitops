@@ -8,9 +8,7 @@ This directory contains ArgoCD Application manifests for deploying Keycloak acro
 argocd/
 ├── clusters/
 │   └── local/
-│       ├── dev.yaml      # Local dev cluster
-│       ├── qa.yaml       # Local QA cluster
-│       └── prod.yaml     # Local prod cluster
+│       └── dev.yaml      # Local dev cluster (el unico que existe)
 └── README.md
 ```
 
@@ -28,18 +26,6 @@ argocd/
 
 ```bash
 kubectl apply -f clusters/local/dev.yaml
-```
-
-### Deploy to Local QA
-
-```bash
-kubectl apply -f clusters/local/qa.yaml
-```
-
-### Deploy to Local Prod
-
-```bash
-kubectl apply -f clusters/local/prod.yaml
 ```
 
 ## Application Configuration

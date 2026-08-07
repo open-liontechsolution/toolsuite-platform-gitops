@@ -1,0 +1,37 @@
+{{- if .Values.realmConfig.enabled }}
+{{- $pattern := printf "%s/*.yaml" (trimSuffix "/" .Values.realmConfig.path) }}
+{{- $files := .Files.Glob $pattern }}
+{{- if not $files }}
+  {{- fail (printf "realmConfig.enabled es true pero no hay ningun realm en '%s'" $pattern) }}
+{{- end }}
+
+{{- /*
+  Guardarrail de la issue #219: `webOrigins` tiene que ser un ORIGEN DESNUDO.
+  Keycloak compara la cabecera `Origin` del navegador, que nunca lleva ruta, asi que
+  un `https://host/*` no casa nunca y deja el login roto sin que falle ningun test de
+  API. Aqui el render revienta antes de tocar el IdP: el fallo no llega ni a mergearse.
+*/}}
+{{- range $path, $_ := $files }}
+  {{- $realm := $.Files.Get $path | fromYaml }}
+  {{- if not $realm.realm }}
+    {{- fail (printf "%s no declara la clave 'realm'" $path) }}
+  {{- end }}
+  {{- range $client := ($realm.clients | default list) }}
+    {{- range $origin := ($client.webOrigins | default list) }}
+      {{- if or (hasSuffix "/*" $origin) (regexMatch "^https?://[^/]+/" $origin) }}
+        {{- fail (printf "%s: client '%s' tiene webOrigins '%s' con sintaxis de redirect URI. Keycloak espera un origen desnudo (sin ruta ni '/*'); con ruta no casa la cabecera Origin y el login se rompe en navegador. Ver deal-tracker#219." $path $client.clientId $origin) }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "keycloak.realmConfig.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "keycloak.realmConfig.labels" . | nindent 4 }}
+data:
+  {{- ($files).AsConfig | nindent 2 }}
+{{- end }}
