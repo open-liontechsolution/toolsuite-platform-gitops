@@ -6,9 +6,18 @@ Los dos ejecutan exactamente lo mismo; lo unico que cambia es quien los dispara.
 {{- printf "%s-realm-config" .Release.Name -}}
 {{- end -}}
 
+{{/*
+NO usar aqui `keycloak.name` (que devuelve "keycloakx"). La NetworkPolicy de egress del
+servidor selecciona por `name=keycloakx` + `instance=<release>`, asi que unos pods con esas
+etiquetas caen dentro de ella — y sus reglas permiten salida a los puertos 80 y 443, pero el
+Service traduce al 8080 del pod destino, que no esta permitido: el Job no puede hablar con
+Keycloak y muere por timeout a los 120s. Con nombre propio quedan fuera de esa policy, que
+esta pensada para el servidor y no para esto.
+*/}}
 {{- define "keycloak.realmConfig.labels" -}}
-app.kubernetes.io/name: {{ include "keycloak.name" . }}
+app.kubernetes.io/name: keycloak-realm-config
 app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/part-of: {{ include "keycloak.name" . }}
 app.kubernetes.io/component: realm-config
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
