@@ -131,6 +131,19 @@ duplicated and pruned.
   the first would duplicate the scrape, and the second emits rules without the
   `prometheus: prometheus-persistant` label, which our `ruleSelector` drops silently. Taking ownership
   means deleting the object there first, then enabling it here — in that order.
+- **Databases and roles inside a CNPG cluster are declarable, and the nesting is asymmetric.** Since
+  operator 1.25 the `Database` CRD and `spec.managed.roles` do this natively — no Job, no CronJob. In
+  the wrapper: databases go in **`cluster.databases`** (a sibling of `cluster.cluster`, *outside* it),
+  roles go in **`cluster.cluster.roles`** (*inside*; the subchart builds the `managed:` block itself).
+  `cluster.managed.roles`, the intuitive spelling, renders without the role and says nothing. Role
+  passwords need `templates/role-sealedsecret.yaml`, not the `sealedSecret` block — CNPG requires
+  `type: kubernetes.io/basic-auth` and matches the secret's `username` against the role name.
+  Two traps worth knowing before touching this: declaring a role that **already exists** with a
+  `passwordSecret` makes CNPG **reset its password** to the sealed one (adopt preexisting roles one at
+  a time, never in a batch), and Argo owns `spec.managed.roles` as an **atomic list**, so the
+  API-server defaults inside it (`inherit`, `connectionLimit`) must be written out or the Application
+  sits `OutOfSync` forever. `platform-postgres-dev` still has **five databases created by hand** that
+  live in no repo — `apps/data/cnpg/README.md` has the inventory and the procedure.
 - **Postgres backups are `barmanObjectStore` → MinIO** (`s3://cnpg-backup`), configured in the base
   `values.yaml` of `apps/data/cnpg` and `apps/data/authentik-postgres`, switched on per environment. The
   in-tree barman support is deprecated and disappears in CNPG **1.31** (operator is on 1.28.1); migrating
