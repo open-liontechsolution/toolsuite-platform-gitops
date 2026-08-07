@@ -57,10 +57,14 @@ spec:
       jsonPointers:
       #  - /spec/instances
         - /status
-    # Igual que el Cluster: el operador escribe `.status` del Database
-    # (`applied`, `observedGeneration`, `message`) y sin esto la Application se
-    # queda OutOfSync permanente, que aqui es peor que ruido — el sync es manual,
-    # asi que un OutOfSync cronico esconde los cambios que si hay que mirar.
+    # Preventivo, en espejo del de arriba: el operador escribe `.status` del
+    # Database (`applied`, `observedGeneration`, `message`).
+    #
+    # Honestidad sobre esta regla: MEDIDO el 08-08-2026, el Database salio Synced
+    # SIN ella — Argo no estaba diffeando su status. Se deja igualmente porque el
+    # coste es cero y el fallo que evita es caro: aqui el sync es manual, asi que
+    # un OutOfSync cronico esconde los cambios que si hay que mirar. Si algun dia
+    # estorba, se quita sin miedo.
     - group: postgresql.cnpg.io
       kind: Database
       jsonPointers:

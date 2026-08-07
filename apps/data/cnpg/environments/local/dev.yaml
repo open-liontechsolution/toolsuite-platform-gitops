@@ -106,6 +106,17 @@ cluster:
         createdb: false
         passwordSecret:
           name: deal-tracker-prod-db
+        # Estos dos son los defaults que rellena el API server, escritos a mano
+        # a proposito. Argo posee `spec.managed.roles` como lista ATOMICA, asi
+        # que lo que el operador añada dentro le cuenta como diferencia y la
+        # Application se queda OutOfSync para siempre. Medido: sin estas dos
+        # lineas, el sync sale Succeeded y el Cluster sigue OutOfSync.
+        #
+        # La alternativa —un ignoreDifferences sobre /spec/managed/roles— seria
+        # peor: taparia justo los cambios de roles que en un cluster compartido
+        # hay que ver.
+        inherit: true
+        connectionLimit: -1
     
     # Primary update strategy
     primaryUpdateStrategy: unsupervised
