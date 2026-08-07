@@ -128,3 +128,9 @@ sealedSecret:
 networkPolicy:
   enabled: true
   databaseNamespace: "data-dev"
+
+# Realms declarados en git (issue #49). El resto de la configuracion esta en el
+# values.yaml base; aqui solo se enciende y se apunta al Service de esta release.
+realmConfig:
+  enabled: true
+  keycloakUrl: "http://keycloak-dev-http"

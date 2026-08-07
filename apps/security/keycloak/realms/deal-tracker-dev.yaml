@@ -1,0 +1,86 @@
+# Realm deal-tracker-dev — declarado en git (issue #49)
+#
+# OJO CON EL NOMBRE: su consumidor real es el entorno QA de deal-tracker. El client
+# `deal-tracker-web` no tiene ninguna redirect URI de dev; todas apuntan a
+# dealtracker-qa.liontechsolution.com. Cambiar algo aqui afecta a QA.
+#
+# `webOrigins` espera ORIGENES DESNUDOS (esquema + host, sin ruta y sin `/*`).
+# El navegador manda la cabecera `Origin` sin ruta: si aqui se escribe
+# `https://host/*` no casa, Keycloak no emite `Access-Control-Allow-Origin` en la
+# respuesta de /token y el login se rompe para todo usuario real — con los tests de
+# API en verde, porque sin navegador no hay CORS. Eso es deal-tracker#219.
+# El template del ConfigMap rechaza esa sintaxis en tiempo de render.
+#
+# Este fichero es deliberadamente minimo: declara lo que nos importa, no un export
+# completo. Lo no declarado se queda como esta (import.managed.*=no-delete).
+# Los usuarios NO se declaran aqui: keycloak-config-cli no sabe borrar usuarios.
+
+realm: deal-tracker-dev
+enabled: true
+sslRequired: external
+
+loginWithEmailAllowed: true
+duplicateEmailsAllowed: false
+editUsernameAllowed: false
+
+# Sin auto-registro: hoy los usuarios se dan de alta a mano. La decision para
+# produccion se toma en la issue #50 y se declara en su propio fichero de realm.
+registrationAllowed: false
+registrationEmailAsUsername: false
+verifyEmail: false
+resetPasswordAllowed: false
+
+clients:
+  - clientId: deal-tracker-web
+    enabled: true
+    protocol: openid-connect
+
+    # Client publico: sin secreto. Authorization Code + PKCE (S256).
+    publicClient: true
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    frontchannelLogout: true
+    fullScopeAllowed: true
+
+    redirectUris:
+      - https://dealtracker-qa.liontechsolution.com/*
+
+    # Origen desnudo. Sin `/*`. Leer la cabecera del fichero antes de tocar esto.
+    webOrigins:
+      - https://dealtracker-qa.liontechsolution.com
+
+    attributes:
+      pkce.code.challenge.method: S256
+      post.logout.redirect.uris: https://dealtracker-qa.liontechsolution.com/*
+      use.refresh.tokens: "true"
+      backchannel.logout.session.required: "true"
+      frontchannel.logout.session.required: "true"
+
+    # El backend valida `aud`: sin este mapper los tokens dejan de servirle.
+    protocolMappers:
+      - name: aud-deal-tracker-web
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: deal-tracker-web
+          id.token.claim: "false"
+          access.token.claim: "true"
+          introspection.token.claim: "true"
+          lightweight.claim: "false"
+
+    defaultClientScopes:
+      - web-origins
+      - acr
+      - roles
+      - profile
+      - basic
+      - email
+    optionalClientScopes:
+      - address
+      - phone
+      - organization
+      - offline_access
+      - microprofile-jwt

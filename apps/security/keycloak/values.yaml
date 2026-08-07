@@ -81,3 +81,94 @@ networkPolicy:
   enabled: false
   # Database namespace for cross-namespace connectivity
   databaseNamespace: ""
+
+# Realms declarados en git (issue #49)
+# Los ficheros de realms/ se montan en un ConfigMap y los aplica keycloak-config-cli:
+#   - Job con hook PostSync -> corre en cada sync de la Application (cambio intencionado)
+#   - CronJob               -> reaplica sin que nadie sincronice (revierte cambios a mano)
+# Los usuarios NUNCA se tocan: keycloak-config-cli no sabe borrarlos (UserImportService
+# registra "Purging users isn't supported" incluso con `users: []`), y los ficheros de
+# realm no los declaran. El auto-registro de usuarios es seguro frente al CronJob.
+realmConfig:
+  enabled: false
+
+  image:
+    # Etiqueta <version-cli>-<version-keycloak>. El servidor esta en 26.5.1.
+    repository: quay.io/adorsys/keycloak-config-cli
+    tag: "6.5.1-26.5.5"
+    pullPolicy: IfNotPresent
+
+  # Directorio del chart del que salen los realms (glob *.yaml).
+  path: realms
+
+  # URL interna del Keycloak a configurar. Depende de fullnameOverride, asi que se fija
+  # por entorno en lugar de derivarla.
+  keycloakUrl: ""
+  loginRealm: master
+  availabilityCheckTimeout: 120s
+
+  # Secret con las credenciales de administrador. Se reutiliza el que ya existe; no hace
+  # falta sellar nada nuevo.
+  adminSecret:
+    name: keycloak-admin-credentials
+    userKey: KEYCLOAK_ADMIN
+    passwordKey: KEYCLOAK_ADMIN_PASSWORD
+
+  # El checksum del fichero importado. Por defecto config-cli lo cachea y se salta la
+  # aplicacion si el fichero no cambio, lo que dejaria al CronJob sin efecto: el fichero
+  # solo cambia en un commit, asi que un cambio hecho a mano en Keycloak no volveria nunca.
+  # Desactivarlo es lo que hace que la reconciliacion sea real.
+  cache:
+    enabled: false
+
+  # Que puede borrar config-cli cuando algo deja de estar declarado.
+  # Primera iteracion: no-delete en todo. Con ficheros de realm minimos, `full` borraria
+  # los clients y flows por defecto que Keycloak crea solo. `component` en no-delete
+  # ademas evita el unico camino por el que se pueden perder usuarios: borrar y recrear
+  # una user federation (LDAP/AD) se lleva por delante a sus usuarios federados.
+  managed:
+    authentication-flow: no-delete
+    client: no-delete
+    client-authorization-policies: no-delete
+    client-authorization-resources: no-delete
+    client-authorization-scopes: no-delete
+    client-scope: no-delete
+    client-scope-mapping: no-delete
+    component: no-delete
+    group: no-delete
+    identity-provider: no-delete
+    identity-provider-mapper: no-delete
+    message-bundles: no-delete
+    required-action: no-delete
+    role: no-delete
+    scope-mapping: no-delete
+    sub-component: no-delete
+
+  reconcile:
+    enabled: true
+    schedule: "0 4 * * *"
+    timeZone: Europe/Madrid
+
+  # Mismo criterio que el StatefulSet: solo nodos worker. Los control-plane de este
+  # cluster no resuelven registries externos de forma fiable (master-b no resuelve
+  # quay.io), asi que dejarlo al azar del scheduler es un ImagePullBackOff intermitente.
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node-role.kubernetes.io/worker
+                operator: In
+                values:
+                  - "true"
+
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 3600
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"

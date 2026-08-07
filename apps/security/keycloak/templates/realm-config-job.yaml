@@ -1,0 +1,27 @@
+{{- if .Values.realmConfig.enabled }}
+{{- /*
+  Hook PostSync: aplica los realms despues de cada sync de la Application. Como
+  `keycloak-local-dev` no tiene `automated` (sync manual, a proposito), este Job cubre
+  el cambio intencionado; la reconciliacion de un cambio hecho a mano la hace el
+  CronJob de al lado.
+*/}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "keycloak.realmConfig.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "keycloak.realmConfig.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: {{ .Values.realmConfig.backoffLimit }}
+  ttlSecondsAfterFinished: {{ .Values.realmConfig.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "keycloak.realmConfig.labels" . | nindent 8 }}
+    spec:
+      {{- include "keycloak.realmConfig.podSpec" . | nindent 6 }}
+{{- end }}
