@@ -47,9 +47,69 @@ de réplica caída y de replication lag, que hoy no existen porque con una insta
 
 Mientras tanto, la recuperación de este cluster es **por backup, no por failover**.
 
+## Bases de datos y roles
+
+Este Postgres es **multi-inquilino**: lo comparten varias aplicaciones, cada una con su base y su role.
+Lo que sigue es el inventario, y sobre todo qué parte de él está declarada.
+
+| Base | Role dueño | Quién la usa | ¿Declarada? |
+|---|---|---|---|
+| `platform` | `platform` | — | sí, `cluster.cluster.initdb` |
+| `deal_tracker_prod` | `deal_tracker_prod` | deal-tracker prod | sí, `cluster.databases` + `cluster.cluster.roles` |
+| `deal_tracker` | `deal_tracker` | deal-tracker dev | **no** |
+| `deal_tracker_qa` | `deal_tracker_qa` | deal-tracker qa | **no** |
+| `keycloak_dev` | `postgres` | Keycloak (`security-dev`) | **no** |
+| `tradingtool-dev` | `tradingtool-dev-user` | tradingtools dev | **no** |
+| `tradingtool-qa` | `tradingtool-qa-user` | tradingtools qa | **no** |
+
+Las cinco marcadas se crearon a mano contra el secret superusuario y **no aparecen en ningún repositorio**.
+El backup físico devuelve los *datos*; el reparto de bases, dueños y roles no está escrito en ninguna
+parte, así que reconstruir este cluster desde cero es hoy recrear cinco bases a mano y acordarse de quién
+era dueño de cada una. Es el mismo agujero que los realms de Keycloak antes de la #49.
+
+Desde CNPG 1.25 hay mecanismo nativo y no hace falta montar nada: el CRD `Database`
+(`cluster.databases`) y `spec.managed.roles` (`cluster.cluster.roles`), los dos reconciliados por el
+operador. La #53 estrenó el patrón con `deal_tracker_prod`, que era nueva y no podía romper nada.
+
+**Adoptar las cinco va de una en una, con verificación entre medias**, y por un motivo concreto: declarar
+un role que ya existe con su `passwordSecret` hace que CNPG **le resetee la contraseña** a la del secret.
+Si el valor sellado no es exactamente el que usa hoy la aplicación, se cae. En lote, se caen las cinco a la vez.
+
+### Añadir una base nueva
+
+Tres piezas en `environments/local/dev.yaml`, y las tres en el mismo commit:
+
+```yaml
+cluster:
+  cluster:
+    roles:                       # ojo: cluster.cluster.roles, NO cluster.managed.roles
+      - name: mi_app
+        ensure: present
+        login: true
+        superuser: false
+        createdb: false
+        passwordSecret:
+          name: mi-app-db
+  databases:                     # hermana de cluster.cluster, no dentro
+    - name: mi_app
+      owner: mi_app
+      databaseReclaimPolicy: retain
+
+roleSecrets:
+  mi-app-db:
+    username: "<ciphertext de: mi_app>"
+    password: "<ciphertext>"
+```
+
+El `username` sellado tiene que ser **literalmente el nombre del role**. Y `retain` se escribe explícito
+aunque sea el default del CRD: con `delete`, borrar el objeto `Database` DROPea la base.
+
+El objeto `Database` se llamará `platform-postgres-dev-mi-app` (el prefijo lo impone el subchart); el
+nombre que importa —el de la base— es `spec.name`.
+
 ## Secrets Management
 
-Los dos Secret del chart se renderizan como `SealedSecret` desde `templates/`, con el ciphertext viviendo
+Los tres Secret del chart se renderizan como `SealedSecret` desde `templates/`, con el ciphertext viviendo
 directamente en el values de entorno. No hay ficheros de Secret sueltos: el antiguo
 `environments/local/secrets/` se borró en la issue #44.
 
@@ -57,6 +117,13 @@ directamente en el values de entorno. No hay ficheros de Secret sueltos: el anti
 |---|---|---|---|
 | `platform-postgres-app` | `templates/sealedsecret.yaml` | `sealedSecret` | credenciales de la BD `platform` |
 | `cnpg-backup-s3-creds` | `templates/backup-s3-sealedsecret.yaml` | `backupSecret` | credencial S3 del backup a MinIO |
+| `deal-tracker-prod-db` | `templates/role-sealedsecret.yaml` | `roleSecrets` | contraseña del role `deal_tracker_prod` |
+
+`roleSecrets` va por **mapa** (clave = nombre del Secret) en vez de un bloque por secret como los otros
+dos, porque queda pendiente adoptar cinco roles más y eso serían cinco bloques casi iguales. Y su template
+emite `type: kubernetes.io/basic-auth`, no `Opaque`: es lo que CNPG exige para un `passwordSecret`, y
+además compara el `username` de dentro con el nombre del role. Si no cuadra, ignora la contraseña **sin
+avisar** — el Secret se desella, el Cluster sincroniza, y el role se queda sin poder entrar.
 
 Se sella valor a valor con `--raw`. El namespace y el nombre **forman parte del cifrado**: tienen que coincidir
 exactamente con el destino, y la misma credencial en otro namespace hay que sellarla otra vez.

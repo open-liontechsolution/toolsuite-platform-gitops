@@ -57,3 +57,11 @@ spec:
       jsonPointers:
       #  - /spec/instances
         - /status
+    # Igual que el Cluster: el operador escribe `.status` del Database
+    # (`applied`, `observedGeneration`, `message`) y sin esto la Application se
+    # queda OutOfSync permanente, que aqui es peor que ruido — el sync es manual,
+    # asi que un OutOfSync cronico esconde los cambios que si hay que mirar.
+    - group: postgresql.cnpg.io
+      kind: Database
+      jsonPointers:
+        - /status

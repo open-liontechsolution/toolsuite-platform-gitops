@@ -81,6 +81,31 @@ cluster:
         owner: platform
         secret:
           name: platform-postgres-app
+
+    # Role de la base de produccion de deal-tracker (#53).
+    #
+    # Esto es `cluster.cluster.roles`: la lista que el subchart cuelga de
+    # `.spec.managed.roles` del Cluster. NO es `cluster.managed.roles`, que es
+    # donde uno lo pondria por intuicion y donde no lo lee nadie.
+    #
+    # Espeja lo que ya tiene `deal_tracker_qa` en este mismo Postgres: entra,
+    # pero no es superusuario ni puede crear bases. La contraseña sale del
+    # SealedSecret `deal-tracker-prod-db` de mas abajo (`roleSecrets`).
+    #
+    # Los cinco roles de aplicacion que ya existen (deal_tracker,
+    # deal_tracker_qa, keycloak_dev, tradingtool-dev-user, tradingtool-qa-user)
+    # NO estan aqui a proposito: son de antes, creados a mano, y declararlos con
+    # `passwordSecret` les resetearia la contraseña de golpe. Se adoptan de uno
+    # en uno, en su propia issue.
+    roles:
+      - name: deal_tracker_prod
+        ensure: present
+        comment: "deal-tracker produccion (Liontech-Solution/deal-tracker#267)"
+        login: true
+        superuser: false
+        createdb: false
+        passwordSecret:
+          name: deal-tracker-prod-db
     
     # Primary update strategy
     primaryUpdateStrategy: unsupervised
@@ -100,6 +125,31 @@ cluster:
         effective_io_concurrency: "200"
         min_wal_size: "128MB"
         max_wal_size: "512MB"
+
+  # Base de produccion de deal-tracker (#53), via el CRD `Database`.
+  #
+  # Es la SEGUNDA base declarada de este cluster: la otra es `platform`, que sale
+  # del initdb. Las otras cinco (deal_tracker, deal_tracker_qa, keycloak_dev,
+  # tradingtool-dev, tradingtool-qa) se crearon a mano y no viven en ningun
+  # repositorio; reconstruir este Postgres desde cero es hoy recrearlas a mano y
+  # acordarse de quien era dueño de cada una. Esta issue no arregla eso, solo
+  # evita añadir una sexta al monton.
+  #
+  # El nombre de la base y el del role son CONTRATO con
+  # k3s-local-apps-manifests: van dentro del DATABASE_URL de
+  # `deal-tracker/overlays/prod/secret.example.yaml`. Cambiarlos aqui rompe alli.
+  #
+  # `retain` es el default del CRD, pero se escribe: con `delete`, borrar este
+  # objeto DROPea la base de produccion.
+  #
+  # No se declara el schema `public`. Dev y qa lo tienen ALTERado a mano al role;
+  # aqui se deja como lo hace CNPG de fabrica (dueño `pg_database_owner`), que da
+  # lo mismo en la practica — el dueño de la base es miembro implicito de ese
+  # role y hereda CREATE sobre `public`, que es lo que necesitan las migraciones.
+  databases:
+    - name: deal_tracker_prod
+      owner: deal_tracker_prod
+      databaseReclaimPolicy: retain
 
   # Backup logico a MinIO. Forma completa (endpoint, bucket, horario, retencion)
   # en el values.yaml base; aqui solo el interruptor.
@@ -148,3 +198,23 @@ backupSecret:
   encryptedData:
     accessKeyId: "AgBz1690H1TSK+mWMq+a9CvDgqs69P/AsRSUpF0yNMupfx/yIn0hhgV0P3uBs83roIU22EaH8Bj+UO9mtCX7ETQK0BE1FZSXQpf7PcwwuGlWO0gd0K8PkVMkUiBh0WkYHhqiuCSSeOSGp1VwzwHIKcMsxdZWjflHjy9Pt1G93mgcYWXJ/d/WDZpn3OrDBEKI9lyUqeRU0ocP7XpTTtdH3nlIcGUEPEvYin3rrV3HRkRiamA0CZRoyZ5Ts4cpkNq+sSw0kX8vw+L/20MGu8tRAH17AC+Lz4G8fduBzMY3xJm7M/3kNTYzHmcmQYNzbcPTxWAeBCWfsGLHArayR/deXYX2+pcYMNYYSznT9EWRJXihtoCYglXIUTctysbqHqo56FXdI3nDpgTn6sAMBjI+qJNQzq5u3JmgWEgSldOdevXQT3nT2Ux5d6VSibc2uf+yraOUntl9PS6UTXNIQk/CncDGQGWtq7dsLCi6uXIxqkL1m0tdwysgSC36M4j75dZ+AdAKr4Gi9x+pF9kcNDnBn5khaTZKyyhIqyZWJcfjds7VJitCKp/p7UxlqIDzxVRDGKRVzL+NZSNOaCu30fYhaaVM+HPvzTxg9Ctbg42TLnQ73BitvnGrLWtibVBJO7k2PZ/B0+erqgC7SqJ6HK05wwbvNxKR8TpAxlc4M7ds6u4tjKfD0uk1bS/FSN3Ya9mdSmQXYCvDu7/rvwyEmg=="
     secretAccessKey: "AgAdlNToe/+GPrhVT6Vh1eenUL76/nWW88SZHDd30cv7gh55XT+Dl6up2OF0WFNIlpcEJ2yuEyhG1G9Hyw6JMVOq9SDqT9u/rrHGEZzUL0cX2zvGFjB+VV0BpQR6gRtcp9l8YQxM2eQYACk5fzDmBMNd6uNV8ZtEiFNX+/3SWue9quD/Zs8K2ZgdXtnYQ+79P2dUoCVuzHgPiJnSxj9QOoLYRYjIjyKnk+xYTX5XR3BWPBpBI4U3TsS6SZg7QyJZw9hyUYAKprayCWeAhdnPdMT7Zfk7OTTxxTqn+6ZKR8OE2uCQ7256jqCfIVdNYBeA/McY4zqgXYPuR1hT70+uCussT61bFkRuwr617C6CXpWqWaKxZIFoR2kRFxawTZy/x7b5+Lh/jiBGKUAYFXfzGU0HtfPHBNGoJNB8caI4v2D4yqgmOZE5gR4ezrCAXmrn9cWweFXhvc8n8V72xqphCy6jLbiX8p7b6FUfevsc+FS7jNB6T6QNmOMGsWh7gv5605y8PLLrWYbwLQ3uBdAcj54CbsAkrRl5cUSGAmxVGCnsXT3zOg83vHQd3K98gTG+4zJ9clt8lLkc6YmgcF7UDFxqHsMj8qF7ZbUZyXHlcFkZfH53bRswVbzjKEPjD52948O+Urgnq5W+l0Swome3Z5LQ5qbULp+jlCcr9wRxbr0St2WSb47vh9YqRTLlzU+9ykLeJLmwH/8DJ7a3t9kJC3bD6HFaqkN7ActKHbxlO/E0/5ug6Zrk7/dq"
+
+# Contraseña del role `deal_tracker_prod` (#53). Forma completa y el porque del
+# mapa, en templates/role-sealedsecret.yaml.
+#
+# Tipo `kubernetes.io/basic-auth`, no `Opaque` como los dos secrets de arriba:
+# CNPG lo exige para un `passwordSecret`, y ademas compara el `username` de
+# dentro con el nombre del role. Por eso el plaintext de `username` es
+# literalmente `deal_tracker_prod`.
+#
+# El MISMO plaintext esta sellado DOS veces, porque el namespace entra en el
+# cifrado: aqui para `data-dev` (para que CNPG cree el role) y en
+# k3s-local-apps-manifests para `deal-tracker-prod`, dentro del `DATABASE_URL`
+# del Secret `deal-tracker-config`. Los ciphertexts son distintos y NO son
+# intercambiables. Rotarla obliga a re-sellar en los DOS sitios, y en ese orden:
+# primero aqui, que es quien manda sobre el role, y despues el overlay — al
+# reves deja la aplicacion fuera hasta que sincronice esto.
+roleSecrets:
+  deal-tracker-prod-db:
+    username: "AgCHbFMhUq3C6nFSJCkNVCt3Vn3kXP2Z3dXc3x3ZqkPjdqwN1xy5yt57qjp6gbX+915JBr7P8peUcdw9T7DQMRN5akq3yeKJyHuOqgrACOMixz10Alpf63w/3mjyuQsBby1dveKYWhOiXCU6OiBFN/HoM9OetjxdUfEjpMdClqv6h5Eo5BNe4fjTpXs6SKbBHzBqnr3Se8w6Ox+Q3Gzj8Xlc+Z/3gtSzRq9BnNzX1asbsVNvXC2BidCkNjGw6X38ygSoRx4pJe+z0Fol2EmYaV3CqP4S/70PTWI808ij18Wj1ifwBD8Ti4Lfv5O354eH2+2xc0PLOVXG/dw1lIxMuYnHogNA6JYWXetc64R9fHrLJvS1KGF8zyCkxqbsSZJnG+oIBo0pyH0crnzOe/yXuO+qHYvjel9NRf1gCZkjPFNVxKiEybnXvPWDThOguoL7ayIC1NZ/6BkDQQLCEZF7JV/PCqlPCMD3vMU/MNWyNIXB/giiWtaDqxBWjgpwAzZlbfLpPf09iRueIFC2qLdV+VQoceLnB+Wv/UKq14igGgNPZ4ntpmBu6bi/XmwsjxRU7gtTks/40LOOzCFTr0r/9LHj7M8lWB3B3RCHJakhWctlSsv1k5baaQPU5bkDq9o9Uzaa9tBU3NvdnO4jwqjCeGMam2j+KiT3BACX2WStMj+hEsYYBQKpsGCi/hhnwLUDjBA7/GVPXw7GtweJ1thU2ruw9g=="
+    password: "AgBBOzNy0jUX0FR2+ELBn72o8fYjfMTSS44fqZfEK32+nDrUx2EKVZTGEtz5jNkTiigfA6hPaktBikK/wyaZiSORkgaE2zf/kZ1m9hNEE7jSpDzxFDuQ+QlkXp1Yx41fF1zyf4OUfyUIouPZ/SGqFzGQW+6sLhxm4kbuij8m7zXH1r9LUXn2WXWKDUobmy/J0IoXVCjM6u/1jglg1cGmhaTJCzfyLIyTYpjC9ykacWTfdBvTjShx214UNTV4N5Of44vcqLvo3w8Jl5Qf+qPiy5uasg9nnn6AuUvko1N8VYvAkSnRzGu/Jzvi5dFtrm6qCe6W5Fg7beHAUmneYz0lK58smMyTZjtlEccZuH6XbDqy44s+qLwY4pw+wqbiU9BYnrpAqsugJiAYkfg9gYOcHS1i9W0YhpVsNPsBk+WCh7a9jKnuM3Ox3p9K2dn0TMENUl36s+TccC6PXBbf7ttMZvqTrC24orTTe6J82gujWY7zAa+h170mUT6bYe0YoLhUhN89265ninaPyKPTGcc9cHipjfOjSkhD3nGD4ISB7qhZUm38hHZqcS5cWlsb6zOXf8GvREFyhgFiOxA0EN8+FsJR0CcZ92mRXpQb5HFaVMUIAlmFE2FQKaUEJos9R6ecyEiBN1YeG3+sJgxazBOUi4CWtDU/+Tuft9OIWkW0FdGLrmbc8Yvs6HkGrL0fptwJpJ9QkpcfdtwvoEWEWDthQjHpYYOCovXDfxUvIITKJaDfQA=="
