@@ -28,8 +28,15 @@ Keycloak is a high-performance Java-based identity and access management solutio
 | Environment | Namespace     | Replicas | CPU Request | Memory Request | Database                    |
 |-------------|---------------|----------|-------------|----------------|-----------------------------|
 | **dev**     | security-dev  | 1        | 250m        | 512Mi          | keycloak_dev @ data-dev     |
-| **qa**      | security-qa   | 2        | 500m        | 1Gi            | keycloak_qa @ data-qa       |
-| **prod**    | security-prod | 2        | 1           | 2Gi            | keycloak_prod @ data-prod   |
+
+**dev es el unico entorno que existe.** Hubo values y Applications de `qa` y `prod` desde el commit
+inicial, nunca desplegados y que no habrian funcionado: anidaban bajo `keycloak:` cuando el subchart
+es `keycloakx`, apuntaban a `data-prod`/`data-qa` (namespaces que no existen) y llevaban
+`REPLACE_WITH_ENCRYPTED_*` en los secretos. Se borraron; escribirlos de nuevo cuando hagan falta
+cuesta menos que confiar en ellos.
+
+El prod de deal-tracker no necesita una instancia nueva: estrena **realm** propio en esta, declarado
+en `realms/`. Ver la issue #50.
 
 ## Database Setup
 
@@ -165,20 +172,6 @@ helm upgrade --install keycloak-dev . \
   --create-namespace \
   --values values.yaml \
   --values environments/local/dev.yaml
-
-# Local QA environment
-helm upgrade --install keycloak-qa . \
-  --namespace security-qa \
-  --create-namespace \
-  --values values.yaml \
-  --values environments/local/qa.yaml
-
-# Local prod environment
-helm upgrade --install keycloak-prod . \
-  --namespace security-prod \
-  --create-namespace \
-  --values values.yaml \
-  --values environments/local/prod.yaml
 ```
 
 ### Using Argo CD
