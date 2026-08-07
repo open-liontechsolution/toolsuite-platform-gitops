@@ -422,8 +422,20 @@ Postgres de Keycloak, asi que un cambio hecho a mano no dejaba rastro en ningun 
 un `webOrigins` mal puesto tumbo el login de QA de deal-tracker durante una release entera
 (`deal-tracker#219`, issue #49 de este repo).
 
-Esta instancia hospeda varios realms (`deal-tracker-dev`, `tradingtool-dev`, `tradingtool-qa`).
-**config-cli solo entra en los realms que aparecen en `realms/`**; el resto no se toca.
+Esta instancia hospeda varios realms. **config-cli solo entra en los que aparecen en `realms/`**;
+el resto no se toca.
+
+| Realm | Fichero | Consumidor |
+|---|---|---|
+| `deal-tracker-dev` | `realms/deal-tracker-dev.yaml` | el entorno **QA** de deal-tracker (el nombre engana: no hay ninguna redirect URI de dev) |
+| `deal-tracker-prod` | `realms/deal-tracker-prod.yaml` | produccion de deal-tracker, `dealtracker.liontechsolution.com` |
+| `tradingtool-dev`, `tradingtool-qa` | — | sin declarar todavia; config-cli no los toca |
+
+Los dos realms de deal-tracker estan separados a proposito: compartir client es lo que convirtio un
+`webOrigins` mal puesto en una caida de login para todo QA, y con prod dentro habria sido una caida
+de produccion. El `KEYCLOAK_ISSUER_URL` y el `KEYCLOAK_AUDIENCE` de cada entorno viven en
+`deal-tracker/overlays/*/secret.example.yaml` del repo de manifiestos: **el nombre del realm y el del
+client son contrato entre repos**, cambiarlos aqui deja de validar los tokens alli.
 
 ### Como se ejecuta
 

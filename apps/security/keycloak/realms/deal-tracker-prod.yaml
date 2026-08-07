@@ -1,0 +1,106 @@
+# Realm deal-tracker-prod — produccion de deal-tracker (issue #50)
+#
+# Realm y client PROPIOS, no compartidos con dev ni con QA. Ese es el motivo de la
+# issue: hoy QA se autentica contra el realm `deal-tracker-dev` con el mismo client,
+# y en deal-tracker#219 un `webOrigins` mal puesto en ese client tumbo el login de QA
+# entero. Compartiendo realm, ese mismo fallo se llevaria por delante produccion.
+#
+# La INSTANCIA si es compartida: esto vive en el mismo Keycloak que dev/QA, servido en
+# keycloak-dev.liontechsolution.com. Los usuarios de produccion veran ese host en la
+# barra al iniciar sesion. Decidido asi a proposito para no bloquear el estreno; el
+# host esta dentro del KEYCLOAK_ISSUER_URL que valida el backend, asi que cambiarlo
+# despues obliga a resellar el secret de `deal-tracker/overlays/prod`.
+#
+# Contrato con los otros dos repos (k3s-local-apps-manifests, deal-tracker):
+#   KEYCLOAK_ISSUER_URL = https://keycloak-dev.liontechsolution.com/realms/deal-tracker-prod
+#   KEYCLOAK_AUDIENCE   = deal-tracker-web
+# Estan escritos en deal-tracker/overlays/prod/secret.example.yaml. Si cambia el nombre
+# del realm o del client aqui, alli deja de validar ningun token.
+#
+# `webOrigins` espera ORIGENES DESNUDOS. Leer la cabecera de deal-tracker-dev.yaml antes
+# de tocarlo; el template lo rechaza en tiempo de render.
+
+realm: deal-tracker-prod
+enabled: true
+sslRequired: external
+
+loginWithEmailAllowed: true
+duplicateEmailsAllowed: false
+editUsernameAllowed: false
+
+# Alta manual, decidido para el estreno. Sin SMTP configurado en la instancia no hay
+# verificacion de correo NI recuperacion de contrasena: con auto-registro, un usuario
+# que olvide la suya se quedaria fuera para siempre. Cuando haya SMTP se cambia aqui,
+# y la contrasena del servidor de correo entra por var-substitution desde un
+# SealedSecret, nunca en claro en este fichero.
+registrationAllowed: false
+registrationEmailAsUsername: false
+verifyEmail: false
+resetPasswordAllowed: false
+
+# A diferencia de dev: aqui las contrasenas son de personas reales y el login esta
+# expuesto a internet por el tunnel.
+bruteForceProtected: true
+
+# Los usuarios NO se declaran en este fichero: keycloak-config-cli no sabe borrarlos y
+# meter credenciales en git es justo lo que la #49 pide evitar. Alta:
+#   kubectl exec -n security-dev keycloak-dev-0 -- /opt/keycloak/bin/kcadm.sh \
+#     create users -r deal-tracker-prod -s username=<usuario> -s email=<correo> -s enabled=true
+# El backend aprovisiona solo la fila en `app_user` a partir de `sub`, `email` y `name`.
+
+clients:
+  - clientId: deal-tracker-web
+    enabled: true
+    protocol: openid-connect
+
+    # Client publico: sin secreto. Authorization Code + PKCE (S256).
+    publicClient: true
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: false
+    frontchannelLogout: true
+    fullScopeAllowed: true
+
+    redirectUris:
+      - https://dealtracker.liontechsolution.com/*
+
+    # Origen desnudo. Sin `/*`. Esto es lo que rompio QA en #219.
+    webOrigins:
+      - https://dealtracker.liontechsolution.com
+
+    attributes:
+      pkce.code.challenge.method: S256
+      post.logout.redirect.uris: https://dealtracker.liontechsolution.com/*
+      use.refresh.tokens: "true"
+      backchannel.logout.session.required: "true"
+      frontchannel.logout.session.required: "true"
+
+    # KEYCLOAK_AUDIENCE=deal-tracker-web: la JwtStrategy del backend exige este `aud`.
+    protocolMappers:
+      - name: aud-deal-tracker-web
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: deal-tracker-web
+          id.token.claim: "false"
+          access.token.claim: "true"
+          introspection.token.claim: "true"
+          lightweight.claim: "false"
+
+    # `profile` y `email` son los que traen name/preferred_username/email, que es de
+    # donde el backend aprovisiona el usuario.
+    defaultClientScopes:
+      - web-origins
+      - acr
+      - roles
+      - profile
+      - basic
+      - email
+    optionalClientScopes:
+      - address
+      - phone
+      - organization
+      - offline_access
+      - microprofile-jwt
