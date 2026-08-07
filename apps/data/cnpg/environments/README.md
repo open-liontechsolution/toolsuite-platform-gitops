@@ -38,9 +38,17 @@ kubectl apply -f apps/data/cnpg/argocd/clusters/local/dev.yaml
 | Bloque | Contenido |
 |---|---|
 | `cluster.cluster` | 1 instancia, Longhorn (20Gi + 1Gi WAL), afinidad worker + `performance=high`, tuning de PostgreSQL |
+| `cluster.cluster.roles` | role `deal_tracker_prod` (`.spec.managed.roles` del Cluster) |
+| `cluster.databases` | base `deal_tracker_prod` (CRD `Database`) — hermana de `cluster.cluster`, no dentro |
 | `cluster.backups` | interruptor del backup lógico a MinIO (la forma completa está en el `values.yaml` base) |
 | `sealedSecret` | credenciales de la BD `platform` (`platform-postgres-app`) |
 | `backupSecret` | credencial S3 del backup (`cnpg-backup-s3-creds`) |
+| `roleSecrets` | contraseña del role `deal_tracker_prod` (`deal-tracker-prod-db`, tipo basic-auth) |
+
+Las dos primeras filas nuevas son la trampa de anidamiento de siempre, pero en las dos direcciones:
+`roles` va **dentro** de `cluster.cluster` (el subchart lo mete él en el bloque `managed`), y `databases`
+va **fuera**, colgando de `cluster` a secas. Escribir `cluster.managed.roles`, que es lo intuitivo, no
+falla: renderiza sin el role y nadie se entera. Ver `../README.md`, "Bases de datos y roles".
 
 ## Encrypted Secrets
 

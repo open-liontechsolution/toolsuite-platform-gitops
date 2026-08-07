@@ -64,6 +64,38 @@ cluster:
       secret:
         name: platform-postgres-app
 
+    # Roles gestionados por el operador (`.spec.managed.roles` del Cluster).
+    #
+    # OJO con el anidamiento: esto es `cluster.cluster.roles`, no
+    # `cluster.managed.roles`. El bloque `managed:` lo construye el subchart en
+    # `cluster/templates/cluster.yaml`; nosotros solo le damos la lista. Ponerlo
+    # un nivel mas arriba es el fallo silencioso de siempre: Helm lo acepta, el
+    # subchart lo ignora y el role no se crea.
+    #
+    # La contraseña de cada role va aparte, en `roleSecrets` (mas abajo), porque
+    # tiene que ser un Secret de tipo basic-auth.
+    #
+    # ATENCION al declarar un role que YA EXISTE en el cluster: darle un
+    # `passwordSecret` hace que CNPG le RESETEE la contraseña a la del secret. Si
+    # el valor no es exactamente el que usa hoy, la aplicacion que lo use se cae.
+    # Los roles preexistentes se adoptan de uno en uno y con verificacion entre
+    # medias, nunca en lote.
+    roles: []
+
+  # Bases de datos declaradas, via el CRD `Database` (CNPG >= 1.25). Las
+  # renderiza `cluster/templates/databases.yaml` del subchart; la lista vacia es
+  # el gate.
+  #
+  # Esto NO es lo mismo que `cluster.cluster.initdb`: initdb solo corre al
+  # crearse el cluster y da UNA base (`platform`). Todo lo demas que vive en este
+  # Postgres se creaba a mano, y por eso el reparto de bases y dueños no estaba
+  # escrito en ningun sitio — los datos vuelven en el backup fisico, el reparto
+  # no. Ver #53.
+  #
+  # `databaseReclaimPolicy` se escribe explicito aunque `retain` sea el default
+  # del CRD: con `delete`, borrar el objeto Database DROPea la base.
+  databases: []
+
   # Backup logico del operator (barmanObjectStore -> MinIO).
   #
   # Las 3 replicas de Longhorn protegen de perder un disco, NO de un `DROP TABLE`
@@ -143,3 +175,17 @@ backupSecret:
     # echo -n "<access-key>" | kubeseal --raw --from-file=/dev/stdin --namespace data-dev --name cnpg-backup-s3-creds --controller-name sealed-secrets --controller-namespace kube-system
     accessKeyId: ""
     secretAccessKey: ""
+
+# Contraseñas de los roles de `cluster.cluster.roles`, una por role.
+# Ver templates/role-sealedsecret.yaml, que explica por que estos van por mapa y
+# no en un bloque propio como los dos de arriba.
+#
+# La clave del mapa es el NOMBRE DEL SECRET, y el mapa vacio es el gate. El
+# plaintext de `username` tiene que ser exactamente el nombre del role: CNPG lo
+# compara, y si no cuadra ignora la contraseña sin avisar.
+#
+#   roleSecrets:
+#     deal-tracker-prod-db:
+#       username: "<ciphertext de: deal_tracker_prod>"
+#       password: "<ciphertext de la contraseña>"
+roleSecrets: {}
