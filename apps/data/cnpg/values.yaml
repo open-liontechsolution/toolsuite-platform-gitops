@@ -116,7 +116,11 @@ cluster:
     # MinIO por LAN, igual que el BackupTarget de Longhorn: los fallos de junio
     # (k3s-local-apps-manifests#7) fueron 502 del proxy que lo fronta. Menos
     # saltos en el camino de los backups.
-    endpointURL: "http://192.168.50.100:9000"
+    # La VM del MinIO estuvo en la .100 hasta 2026-08-09: un repetidor Xiaomi
+    # tenia esa IP guardada en su config (no la pide por DHCP, no hay forma de
+    # desalojarlo) y el archivado de WAL fallaba a rachas segun quien ganaba el
+    # ARP -- alerta CNPGWALArchiveFailing, kxs-ansible#54/#55.
+    endpointURL: "http://192.168.50.240:9000"
 
     # Bucket dedicado, distinto del `longhorn-backup`: credencial separada y
     # retencion independiente. CNPG cuelga cada cluster de su propio serverName

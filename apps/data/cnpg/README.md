@@ -299,7 +299,7 @@ lo que hay configurado aquí. `BACKUPS.md` de `k3s-local-apps-manifests` dice lo
 
 | Pieza | Dónde |
 |---|---|
-| Destino | MinIO de sv2, `http://192.168.50.100:9000`, bucket `cnpg-backup` |
+| Destino | MinIO de sv2, `http://192.168.50.240:9000`, bucket `cnpg-backup` |
 | Ruta | `s3://cnpg-backup/<nombre-del-cluster>/` — CNPG separa por `serverName`, los dos clusters comparten bucket sin pisarse |
 | Credencial | Secret `cnpg-backup-s3-creds` (claves `ACCESS_KEY_ID` / `ACCESS_SECRET_KEY`), sellado en `templates/backup-s3-sealedsecret.yaml` |
 | Horario | `0 30 1 * * *` (01:30 UTC; formato CNPG de **6 campos**, el primero son segundos) |
@@ -375,7 +375,7 @@ AK=$(kubectl -n data-dev get secret cnpg-backup-s3-creds -o jsonpath='{.data.ACC
 SK=$(kubectl -n data-dev get secret cnpg-backup-s3-creds -o jsonpath='{.data.ACCESS_SECRET_KEY}' | base64 -d)
 kubectl -n data-dev exec platform-postgres-dev-1 -c postgres -- \
   env AWS_ACCESS_KEY_ID="$AK" AWS_SECRET_ACCESS_KEY="$SK" AWS_REGION=us-east-1 \
-  barman-cloud-backup-list --endpoint-url http://192.168.50.100:9000 s3://cnpg-backup platform-postgres-dev
+  barman-cloud-backup-list --endpoint-url http://192.168.50.240:9000 s3://cnpg-backup platform-postgres-dev
 ```
 
 El `ScheduledBackup` se crea con `immediate: true`, así que el primer backup arranca al sincronizar, sin

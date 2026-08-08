@@ -64,7 +64,7 @@ cluster:
   backups:
     enabled: false
     provider: s3
-    endpointURL: "http://192.168.50.100:9000"
+    endpointURL: "http://192.168.50.240:9000"
     destinationPath: "s3://cnpg-backup"
     secret:
       create: false

@@ -43,7 +43,7 @@ here and in `apps/security/authentik/environments/local/casa.yaml`.
 Aquí vive el auth de casa: sin backup lógico, un `DROP TABLE` o una corrupción se lleva por delante los
 usuarios de Authentik. Las 3 réplicas de Longhorn cubren perder un disco, no eso.
 
-Misma configuración que `apps/data/cnpg` (MinIO `http://192.168.50.100:9000`, bucket `cnpg-backup`, retención
+Misma configuración que `apps/data/cnpg` (MinIO `http://192.168.50.240:9000`, bucket `cnpg-backup`, retención
 30 días, sin SSE), con el `ScheduledBackup` a las **01:45 UTC** para no solapar con el de `platform-postgres`
 (01:30) — los dos suben al mismo host por la misma LAN. CNPG separa los dos clusters dentro del bucket por
 `serverName`, así que la ruta acaba siendo `s3://cnpg-backup/authentik-postgres-casa/`.
