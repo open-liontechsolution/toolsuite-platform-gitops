@@ -109,3 +109,29 @@ stores (kxs-ansible).
 
 OIDC + SAML Application/Provider blueprints for ChromeOS/Android. The host-level consumers
 (Bazzite/SSSD, NFS home roaming, parental controls) live in **`kxs-ansible`** (#23), not here.
+
+## Troubleshooting: server 0/1 with `signal: bus error`
+
+If `authentik-casa-server` restarts forever and the logs show `gunicorn process died`
+with `signal: bus error` right after `applying django migrations`, check `/dev/shm`
+**before** suspecting the node, the DB or memory:
+
+```bash
+kubectl exec -n security-casa deploy/authentik-casa-server -- df -h /dev/shm
+```
+
+At 100% that is the whole story. `prometheus_client`'s multiprocess dir leaks one mmap
+file per short-lived process; on a full tmpfs an mmap write raises **SIGBUS**, not
+`ENOSPC`, so gunicorn dies, the router retries every ~16s and each retry leaks more. The
+tmpfs belongs to the **pod sandbox**, so container restarts never clear it — only
+deleting the pod does. This took the family IdP down for 12 days (2026-07-29 → 08-10).
+
+`server.env` now points `PROMETHEUS_MULTIPROC_DIR` at a disk-backed emptyDir precisely so
+this cannot recur — see the comment in `values.yaml`. If you ever see it again, the
+immediate repair is `kubectl delete pod`, and the LDAP outpost needs a
+`kubectl rollout restart` too: it backs off to >1h retries and will not reconnect promptly
+on its own.
+
+Two dead ends worth not repeating: `worker4` runs a **16K-page** kernel, which looks like
+an obvious SIGBUS culprit and is not (the same image starts fine there), and the memory
+cgroup is clean (`memory.events` all zeros, 320Mi peak against a 1Gi limit).
