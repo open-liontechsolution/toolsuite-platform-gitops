@@ -157,6 +157,41 @@ authentik:
       enabled: false
     service:
       type: ClusterIP
+    # ------------------------------------------------------------------------
+    # Saca los ficheros mmap de prometheus_client fuera de /dev/shm.
+    #
+    # Por defecto PROMETHEUS_MULTIPROC_DIR es ${TMPDIR}/authentik_prometheus_tmp,
+    # y la imagen trae TMPDIR=/dev/shm. Ese tmpfs son 64 MiB (el default de
+    # Kubernetes) y pertenece al *sandbox del pod*, no al contenedor: sobrevive a
+    # los reinicios. prometheus_client fuga un fichero por proceso efimero y no
+    # los recoge nunca, asi que el tmpfs se llena; y sobre un tmpfs lleno una
+    # escritura a un mmap da SIGBUS, no ENOSPC. Entonces gunicorn muere, el
+    # router lo reintenta cada ~16 s, y cada reintento fuga otro juego de
+    # ficheros: espiral que no sale sola salvo borrando el pod. Paso el
+    # 2026-07-29 y dejo el IdP de casa 12 dias caido, sin UI, sin API y sin LDAP
+    # para los Bazzite; medido al descubrirlo: /dev/shm al 100% con 21.529
+    # ficheros. El worker NO lo necesita (216 KiB en 47 dias) — esto es de
+    # gunicorn (preload_app + reinicios del master), no del `ak worker`.
+    #
+    # /lifecycle/ak solo fija el default con `if [[ -z "${PROMETHEUS_MULTIPROC_DIR}" ]]`,
+    # asi que basta exportarlo. El emptyDir es de DISCO a proposito: uno con
+    # `medium: Memory` se carga contra el limite de memoria del contenedor
+    # (1 GiB), o sea que agrandar el tmpfs solo cambia SIGBUS por OOM-kill. En
+    # disco no hay tamaño fijo que agotar y SIGBUS deja de ser posible. El
+    # sizeLimit es la red de seguridad: si la fuga se desbocase el kubelet
+    # desaloja el pod y este rearranca con el volumen limpio (se auto-sana, que
+    # es justo la reparacion manual que hubo que hacer a mano).
+    # ------------------------------------------------------------------------
+    env:
+      - name: PROMETHEUS_MULTIPROC_DIR
+        value: /prometheus-multiproc
+    volumes:
+      - name: prometheus-multiproc
+        emptyDir:
+          sizeLimit: 1Gi
+    volumeMounts:
+      - name: prometheus-multiproc
+        mountPath: /prometheus-multiproc
 
   worker:
     replicas: 1
