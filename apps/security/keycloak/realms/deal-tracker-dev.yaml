@@ -13,7 +13,9 @@
 #
 # Este fichero es deliberadamente minimo: declara lo que nos importa, no un export
 # completo. Lo no declarado se queda como esta (import.managed.*=no-delete).
-# Los usuarios NO se declaran aqui: keycloak-config-cli no sabe borrar usuarios.
+# Los usuarios NO se declaran aqui: keycloak-config-cli no sabe borrar usuarios, y el CronJob
+# de reconciliacion desharia cada noche cualquier baja. Se dan de alta con
+# `scripts/keycloak-user.sh`; el porque esta en docs/KEYCLOAK_USERS.md.
 
 realm: deal-tracker-dev
 enabled: true
@@ -23,8 +25,10 @@ loginWithEmailAllowed: true
 duplicateEmailsAllowed: false
 editUsernameAllowed: false
 
-# Sin auto-registro: hoy los usuarios se dan de alta a mano. La decision para
-# produccion se toma en la issue #50 y se declara en su propio fichero de realm.
+# Sin auto-registro: los usuarios se dan de alta a mano. No es un pendiente, es la politica
+# —sin SMTP no hay verificacion de correo ni recuperacion de contrasena, asi que el
+# auto-registro dejaria fuera para siempre al primero que olvidase la suya. Razonado en
+# docs/KEYCLOAK_USERS.md; produccion lo declara igual en su propio fichero de realm.
 registrationAllowed: false
 registrationEmailAsUsername: false
 verifyEmail: false
