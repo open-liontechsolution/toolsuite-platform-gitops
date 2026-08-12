@@ -63,13 +63,21 @@ cd toolsuite-platform-gitops
 ./scripts/keycloak-user.sh alta   deal-tracker-prod ana     # revierte la baja
 ```
 
-`crear` imprime la contrasena temporal **una vez** y no vuelve a mostrarla. Se entrega por un
-canal fuera de banda; si se pierde, se hace un `reset`. Para dictarla en lugar de generarla,
-por la entrada estandar:
+`crear` **genera** la contrasena temporal, la imprime una vez y no vuelve a mostrarla. Se entrega
+por un canal fuera de banda; si se pierde, se hace un `reset`. Generarla es lo preferible —24
+caracteres aleatorios son mejores que lo que elige una persona, y ademas va a durar un login—, pero
+se puede dictar, y el camino importa:
 
 ```bash
+# Teclearla a mano: la pide sin eco y con confirmacion. NO queda en el historial del shell.
+./scripts/keycloak-user.sh crear --dictar deal-tracker-prod ana ana@example.com Ana Perez
+
+# Tomarla de un gestor de contrasenas.
 pass show dealtracker/ana | ./scripts/keycloak-user.sh crear deal-tracker-prod ana ana@example.com
 ```
+
+Lo que no hay que hacer es `echo 'micontrasena' | ...`: eso si se queda en el historial, que es
+justo lo que `--dictar` evita. `reset` acepta el mismo `--dictar`.
 
 ## Detalles que conviene saber antes de usarlo
 

@@ -36,7 +36,7 @@
 #
 # Uso:
 #   ./scripts/keycloak-user.sh listar <realm>
-#   ./scripts/keycloak-user.sh crear  <realm> <usuario> <correo> [nombre] [apellido]
+#   ./scripts/keycloak-user.sh crear  [--dictar] <realm> <usuario> <correo> [nombre] [apellido]
 #   ./scripts/keycloak-user.sh reset  <realm> <usuario>
 #   ./scripts/keycloak-user.sh baja   <realm> <usuario>     # deshabilita, NO borra
 #   ./scripts/keycloak-user.sh alta   <realm> <usuario>     # revierte una baja
@@ -45,8 +45,14 @@
 #   ./scripts/keycloak-user.sh crear deal-tracker-prod ana ana@example.com Ana Perez
 #   ./scripts/keycloak-user.sh listar deal-tracker-prod
 #
-# La contrasena se genera aqui y se imprime UNA vez. Para dictarla tu en lugar de generarla,
-# pasala por la entrada estandar:
+# La contrasena se GENERA aqui y se imprime UNA vez. Generarla es lo preferible: 24 caracteres
+# aleatorios son mejores que lo que elige una persona, y ademas es temporal.
+#
+# Para dictarla tu hay dos caminos, y la diferencia importa:
+#   --dictar   la pide por teclado sin mostrarla y sin eco, con confirmacion. Es el bueno para
+#              teclearla a mano: no aparece en el historial del shell.
+#   tuberia    para tomarla de un gestor de contrasenas, no para teclearla — lo que escribas en
+#              la linea de comandos SI se queda en el historial.
 #   pass show dealtracker/ana | ./scripts/keycloak-user.sh crear deal-tracker-prod ana ana@example.com
 #
 # Entorno (por defecto, el unico Keycloak que existe en el cluster):
@@ -67,6 +73,7 @@ command -v python3 >/dev/null || { echo "falta python3 en el PATH" >&2; exit 1; 
 # hiciera el script —mirar si el realm existe— se comeria la contrasena dictada por tuberia
 # y el alta seguiria adelante con una generada, sin que nadie se enterase.
 DICTADO=""
+DICTAR=0
 if [ ! -t 0 ]; then DICTADO="$(cat)"; fi
 
 uso() {
@@ -134,7 +141,19 @@ print(json.dumps(u))
 ' "$@"
 }
 
-leer_password() { # imprime la contrasena: la dictada por stdin si la hubo, si no una generada
+leer_password() { # imprime la contrasena: la dictada, la de stdin, o una generada
+  if [ "$DICTAR" -eq 1 ]; then
+    # Se lee de /dev/tty y no de la entrada estandar: esta funcion corre dentro de una
+    # sustitucion de comandos, y la stdin del script ya puede venir de una tuberia.
+    [ -c /dev/tty ] || { echo "--dictar necesita un terminal; sin el, pasala por tuberia" >&2; exit 1; }
+    local uno dos
+    read -rsp "Contrasena temporal para '$2' (no se muestra): " uno </dev/tty; echo >&2
+    read -rsp "Repitela: "                                     dos </dev/tty; echo >&2
+    [ -n "$uno" ]        || { echo "contrasena vacia: nada que hacer" >&2; exit 1; }
+    [ "$uno" = "$dos" ]  || { echo "no coinciden" >&2; exit 1; }
+    printf '%s' "$uno"
+    return
+  fi
   if [ -n "$DICTADO" ]; then
     local dictada="$DICTADO"
     dictada="${dictada//$'\r'/}"
@@ -167,10 +186,11 @@ cmd_listar() {
 }
 
 cmd_crear() {
+  if [ "${1:-}" = "--dictar" ]; then DICTAR=1; shift; fi
   local realm="${1:?falta el realm}" usuario="${2:?falta el usuario}" correo="${3:?falta el correo}"
   local nombre="${4:-}" apellido="${5:-}"
   comprobar_realm "$realm"
-  local password; password="$(leer_password)"
+  local password; password="$(leer_password "$realm" "$usuario")"
 
   # NO se comprueba antes si el usuario existe: eso seria otra llamada, otros ~20 s, y el
   # propio Keycloak ya responde 409 al duplicado. Correr esto dos veces por error no crea un
@@ -195,12 +215,13 @@ cmd_crear() {
 }
 
 cmd_reset() {
+  if [ "${1:-}" = "--dictar" ]; then DICTAR=1; shift; fi
   local realm="${1:?falta el realm}" usuario="${2:?falta el usuario}"
   comprobar_realm "$realm"
   local id; id="$(id_de "$realm" "$usuario")"
   [ -n "$id" ] || { echo "'$usuario' no existe en '$realm'" >&2; exit 1; }
 
-  local password; password="$(leer_password)"
+  local password; password="$(leer_password "$realm" "$usuario")"
   printf '%s' "$password" | fijar_password "$realm" "$id"
   # `reset-password` con `temporary: true` ya deja la accion pendiente, pero si el usuario
   # se la habia quitado al cambiarla, hay que volver a ponerla explicitamente.
@@ -234,11 +255,15 @@ cmd_alta() {
 }
 
 entregar() { # entregar <usuario> <password>
+  # Si la contrasena la ha tecleado quien ejecuta esto, no se le devuelve: ya la sabe, y
+  # imprimirla solo la deja en el scrollback del terminal, que es justo lo que --dictar evita.
+  local linea="  contrasena:  $2"
+  [ "$DICTAR" -eq 1 ] && linea="  contrasena:  (la que has tecleado)"
   cat >&2 <<TXT
 
   ────────────────────────────────────────────────────────────────
   usuario:     $1
-  contrasena:  $2
+$linea
   ────────────────────────────────────────────────────────────────
   Es TEMPORAL: Keycloak la pedira cambiar en el primer login.
   Entregala por un canal fuera de banda y no la guardes en ningun
