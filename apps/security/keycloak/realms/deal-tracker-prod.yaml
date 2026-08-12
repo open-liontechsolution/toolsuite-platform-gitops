@@ -42,11 +42,20 @@ resetPasswordAllowed: false
 # expuesto a internet por el tunnel.
 bruteForceProtected: true
 
-# Los usuarios NO se declaran en este fichero: keycloak-config-cli no sabe borrarlos y
-# meter credenciales en git es justo lo que la #49 pide evitar. Alta:
-#   kubectl exec -n security-dev keycloak-dev-0 -- /opt/keycloak/bin/kcadm.sh \
-#     create users -r deal-tracker-prod -s username=<usuario> -s email=<correo> -s enabled=true
-# El backend aprovisiona solo la fila en `app_user` a partir de `sub`, `email` y `name`.
+# Los usuarios NO se declaran en este fichero: keycloak-config-cli no sabe borrarlos, y el
+# CronJob de reconciliacion de las 04:00 volveria a habilitar cada noche a quien se hubiera
+# dado de baja. Meter credenciales en git es ademas justo lo que la #49 pide evitar. Alta:
+#
+#   ./scripts/keycloak-user.sh crear deal-tracker-prod <usuario> <correo> [nombre] [apellido]
+#
+# Ese script es el procedimiento, y existe para que el alta deje rastro: el primer usuario de
+# produccion se creo con `kcadm.sh` a mano y no aparece en ningun repositorio. Ojo con el
+# `kcadm.sh create users` suelto que documentaba esta cabecera antes: crea el usuario SIN
+# contrasena y sin UPDATE_PASSWORD, o sea alguien que existe y no puede entrar.
+# La politica de alta —manual mientras no haya SMTP— esta razonada en docs/KEYCLOAK_USERS.md.
+#
+# El backend aprovisiona solo la fila en `app_user` a partir de `sub`, `email` y `name`, y lo
+# hace en el PRIMER LOGIN: un usuario recien creado no existe todavia para la aplicacion.
 
 clients:
   - clientId: deal-tracker-web

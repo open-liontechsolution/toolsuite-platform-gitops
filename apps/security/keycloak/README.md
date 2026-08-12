@@ -474,6 +474,21 @@ aqui, un `webOrigins` roto se arregla en un PR, no en el pod.
 Los secretos no van aqui en claro: el chart ya usa sealed-secrets, y los clients declarados son
 publicos (PKCE), sin secreto que guardar.
 
+### Alta de usuarios
+
+Los usuarios **no** se declaran en `realms/` —ver arriba por que— asi que el alta es su propio
+procedimiento: `scripts/keycloak-user.sh`, con `crear`, `listar`, `reset`, `baja` y `alta`.
+
+```bash
+./scripts/keycloak-user.sh crear deal-tracker-prod ana ana@example.com Ana Perez
+```
+
+Reparte una contrasena **temporal** y fuerza `UPDATE_PASSWORD` en el primer login. Que el alta sea
+manual no es un pendiente: sin SMTP en el realm no hay verificacion de correo ni recuperacion de
+contrasena, y el auto-registro sobre esa base dejaria fuera para siempre al primero que olvidase la
+suya. La politica, el disparador para revisarla y las trampas del script estan en
+[`docs/KEYCLOAK_USERS.md`](../../../docs/KEYCLOAK_USERS.md).
+
 ## Monitoring and Metrics
 
 Keycloak exposes metrics for Prometheus:
