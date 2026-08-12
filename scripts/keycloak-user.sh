@@ -36,7 +36,7 @@
 #
 # Uso:
 #   ./scripts/keycloak-user.sh listar <realm>
-#   ./scripts/keycloak-user.sh crear  [--dictar] <realm> <usuario> <correo> [nombre] [apellido]
+#   ./scripts/keycloak-user.sh crear  [opciones] <realm> <usuario> <correo> [nombre] [apellido]
 #   ./scripts/keycloak-user.sh reset  <realm> <usuario>
 #   ./scripts/keycloak-user.sh baja   <realm> <usuario>     # deshabilita, NO borra
 #   ./scripts/keycloak-user.sh alta   <realm> <usuario>     # revierte una baja
@@ -48,12 +48,19 @@
 # La contrasena se GENERA aqui y se imprime UNA vez. Generarla es lo preferible: 24 caracteres
 # aleatorios son mejores que lo que elige una persona, y ademas es temporal.
 #
-# Para dictarla tu hay dos caminos, y la diferencia importa:
-#   --dictar   la pide por teclado sin mostrarla y sin eco, con confirmacion. Es el bueno para
-#              teclearla a mano: no aparece en el historial del shell.
-#   tuberia    para tomarla de un gestor de contrasenas, no para teclearla — lo que escribas en
-#              la linea de comandos SI se queda en el historial.
-#   pass show dealtracker/ana | ./scripts/keycloak-user.sh crear deal-tracker-prod ana ana@example.com
+# Para elegirla tu hay tres caminos, y la diferencia importa:
+#
+#   --dictar        la pide por teclado sin eco y con confirmacion. No aparece en el historial
+#                   del shell. Es el bueno para un usuario real.
+#   tuberia         para tomarla de un gestor de contrasenas sin que pase por el terminal:
+#                   pass show dealtracker/ana | ... crear deal-tracker-prod ana ana@example.com
+#   --password VAL  en la linea de comandos. El mas comodo y el unico que SE QUEDA EN EL
+#                   HISTORIAL del shell, donde sigue siendo valida hasta que alguien haga el
+#                   primer login. Pensado para usuarios desechables de dev/QA, donde eso da
+#                   igual; para un usuario real usa --dictar.
+#
+# Del lado del pod los tres son iguales de discretos: la contrasena viaja siempre por la entrada
+# estandar hacia el `-f -` de kcadm, nunca en su linea de comandos.
 #
 # Entorno (por defecto, el unico Keycloak que existe en el cluster):
 #   KC_NS=security-dev  KC_POD=keycloak-dev-0  KC_CONTAINER=keycloak
@@ -74,7 +81,28 @@ command -v python3 >/dev/null || { echo "falta python3 en el PATH" >&2; exit 1; 
 # y el alta seguiria adelante con una generada, sin que nadie se enterase.
 DICTADO=""
 DICTAR=0
+PASSWORD_ARG=""
 if [ ! -t 0 ]; then DICTADO="$(cat)"; fi
+
+# Las opciones se aceptan en cualquier posicion; lo demas se devuelve en RESTO. Un `shift` dentro
+# de una funcion solo mueve sus propios parametros, de ahi el array en vez de reescribir "$@".
+RESTO=()
+parsear_opciones() {
+  RESTO=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --dictar)     DICTAR=1; shift ;;
+      --password)   PASSWORD_ARG="${2:?--password necesita un valor}"; shift 2 ;;
+      --password=*) PASSWORD_ARG="${1#*=}"; shift ;;
+      --)           shift; while [ $# -gt 0 ]; do RESTO+=("$1"); shift; done ;;
+      -*)           echo "opcion desconocida: $1" >&2; exit 1 ;;
+      *)            RESTO+=("$1"); shift ;;
+    esac
+  done
+  if [ "$DICTAR" -eq 1 ] && [ -n "$PASSWORD_ARG" ]; then
+    echo "--dictar y --password son incompatibles: elige quien pone la contrasena" >&2; exit 1
+  fi
+}
 
 uso() {
   sed -n '/^# Uso:/,/^#   KC_NS/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -141,7 +169,11 @@ print(json.dumps(u))
 ' "$@"
 }
 
-leer_password() { # imprime la contrasena: la dictada, la de stdin, o una generada
+leer_password() { # imprime la contrasena: la de --password, la dictada, la de stdin o una generada
+  if [ -n "$PASSWORD_ARG" ]; then
+    printf '%s' "$PASSWORD_ARG"
+    return
+  fi
   if [ "$DICTAR" -eq 1 ]; then
     # Se lee de /dev/tty y no de la entrada estandar: esta funcion corre dentro de una
     # sustitucion de comandos, y la stdin del script ya puede venir de una tuberia.
@@ -186,7 +218,7 @@ cmd_listar() {
 }
 
 cmd_crear() {
-  if [ "${1:-}" = "--dictar" ]; then DICTAR=1; shift; fi
+  parsear_opciones "$@"; set -- ${RESTO[@]+"${RESTO[@]}"}
   local realm="${1:?falta el realm}" usuario="${2:?falta el usuario}" correo="${3:?falta el correo}"
   local nombre="${4:-}" apellido="${5:-}"
   comprobar_realm "$realm"
@@ -215,7 +247,7 @@ cmd_crear() {
 }
 
 cmd_reset() {
-  if [ "${1:-}" = "--dictar" ]; then DICTAR=1; shift; fi
+  parsear_opciones "$@"; set -- ${RESTO[@]+"${RESTO[@]}"}
   local realm="${1:?falta el realm}" usuario="${2:?falta el usuario}"
   comprobar_realm "$realm"
   local id; id="$(id_de "$realm" "$usuario")"
@@ -258,7 +290,8 @@ entregar() { # entregar <usuario> <password>
   # Si la contrasena la ha tecleado quien ejecuta esto, no se le devuelve: ya la sabe, y
   # imprimirla solo la deja en el scrollback del terminal, que es justo lo que --dictar evita.
   local linea="  contrasena:  $2"
-  [ "$DICTAR" -eq 1 ] && linea="  contrasena:  (la que has tecleado)"
+  [ "$DICTAR" -eq 1 ]        && linea="  contrasena:  (la que has tecleado)"
+  [ -n "$PASSWORD_ARG" ]     && linea="  contrasena:  (la que pasaste en --password)"
   cat >&2 <<TXT
 
   ────────────────────────────────────────────────────────────────

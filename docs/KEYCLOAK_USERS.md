@@ -72,12 +72,43 @@ se puede dictar, y el camino importa:
 # Teclearla a mano: la pide sin eco y con confirmacion. NO queda en el historial del shell.
 ./scripts/keycloak-user.sh crear --dictar deal-tracker-prod ana ana@example.com Ana Perez
 
-# Tomarla de un gestor de contrasenas.
+# Tomarla de un gestor de contrasenas, sin que pase por el terminal.
 pass show dealtracker/ana | ./scripts/keycloak-user.sh crear deal-tracker-prod ana ana@example.com
+
+# En la linea de comandos. Comodo, y el unico que se queda en el historial: ver abajo.
+./scripts/keycloak-user.sh crear --password 'Temporal-123' deal-tracker-dev prueba prueba@example.com
 ```
 
-Lo que no hay que hacer es `echo 'micontrasena' | ...`: eso si se queda en el historial, que es
-justo lo que `--dictar` evita. `reset` acepta el mismo `--dictar`.
+`reset` acepta las mismas opciones.
+
+**Cuando usar `--password` y cuando no.** Es la via comoda y esta pensada para **usuarios
+desechables de dev/QA**, donde la contrasena no protege nada. El coste es que la linea entera queda
+en el historial del shell, y ahi la contrasena **sigue siendo valida hasta que alguien haga el
+primer login** — que en un usuario de pruebas puede no pasar nunca. Para una persona real, `--dictar`.
+
+Lo que no cambia con ninguna de las tres: **del lado del pod la contrasena nunca aparece en una
+linea de comandos**. Viaja siempre por la entrada estandar hacia el `-f -` de `kcadm.sh`.
+
+## Como comprobar que una credencial vale
+
+Sin navegador, con el client `admin-cli` del propio realm, que si admite `password` grant:
+
+```bash
+curl -s -X POST https://keycloak-dev.liontechsolution.com/realms/<realm>/protocol/openid-connect/token \
+  -d grant_type=password -d client_id=admin-cli -d username=<usuario> \
+  --data-urlencode "password=<la contrasena>"
+```
+
+Los dos errores que interesan **no significan lo mismo**, y ahi esta el valor de la prueba:
+
+| respuesta | que quiere decir |
+|---|---|
+| `invalid_grant: Account is not fully set up` | la contrasena **es correcta**; lo que bloquea el token es el `UPDATE_PASSWORD` pendiente. Es el resultado esperado de un alta recien hecha. |
+| `invalid_grant: Invalid user credentials` | la contrasena no vale. |
+| `unauthorized_client: Client not allowed for direct access grants` | te has equivocado de client: `deal-tracker-web` lleva `directAccessGrantsEnabled: false` a proposito (solo PKCE). |
+
+Que el primero salga es la unica forma de verificar un alta sin navegador: prueba a la vez que la
+credencial se acepta y que el cambio de contrasena forzoso se esta ejerciendo de verdad.
 
 ## Detalles que conviene saber antes de usarlo
 
