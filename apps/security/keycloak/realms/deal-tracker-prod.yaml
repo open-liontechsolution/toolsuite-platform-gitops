@@ -153,6 +153,10 @@ clients:
     # que profile/email/web-origins no le sirven de nada. `roles` es el imprescindible, es el
     # que emite resource_access. Declararlos explicitamente ademas evita que config-cli vea
     # una diferencia y reescriba el client en cada pasada del CronJob.
+    #
+    # En vivo veras un cuarto, `service_account`: lo anade Keycloak solo al encender
+    # serviceAccountsEnabled y no se declara aqui porque es suyo. Medido tras una pasada
+    # completa del CronJob: config-cli no se lo quita.
     defaultClientScopes:
       - roles
       - basic
