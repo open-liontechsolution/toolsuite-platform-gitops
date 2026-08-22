@@ -72,7 +72,7 @@ metadata:
 spec:
   project: tools
   source:
-    repoURL: https://github.com/your-org/toolsuite-platform-gitops
+    repoURL: https://github.com/open-liontechsolution/toolsuite-platform-gitops
     path: apps/data/cnpg
     targetRevision: main
     helm:

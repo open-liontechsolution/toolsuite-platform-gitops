@@ -35,6 +35,37 @@ argocd app sync cnpg-cluster-local-dev
 argocd app sync cnpg-cluster-local-dev --force
 ```
 
+### La Application del fichero no es la que corre en el cluster
+
+**Sintoma:** ninguno. Ese es el problema — no se manifiesta hasta el dia en que alguien vuelve a
+aplicar el fichero y el cambio entra de golpe.
+
+Las Applications de este repo **se aplican a mano** (`kubectl apply -f`); no hay app-of-apps que las
+gestione, asi que nada reconcilia el fichero contra el objeto vivo. Si alguien cambia algo en el
+cluster (`kubectl edit`, la UI de Argo) y no lo baja a git, la divergencia se queda ahi indefinidamente.
+
+Paso de verdad (issue #65): `keycloak-local-dev` y `cnpg-operator` declaraban
+`automated: {prune: true, selfHeal: true}` en git y en el cluster no lo tenian. Un `kubectl apply` las
+habria convertido en auto-sync con prune sobre los realms de produccion de deal-tracker y sobre las
+CRDs de CNPG.
+
+**Comprobacion:**
+
+```bash
+./scripts/argocd-drift.sh        # todas; exit 1 si hay divergencia
+./scripts/argocd-drift.sh -q     # solo el resumen
+```
+
+**Ojo con compararlo a mano.** El API server borra los zero-value al guardar: `allowEmpty: false`,
+`prune: false` y `group: ""` estan en el fichero y no aparecen en lo vivo aunque nadie haya tocado
+nada. Un `diff` en crudo marca 6 de las 8 Applications como divergentes, todas en falso. El script
+normaliza eso antes de comparar; por eso existe en vez de un `kubectl diff`.
+
+**Cuando salga una divergencia, no la resuelvas aplicando el fichero por inercia.** Decide campo a
+campo de que lado esta la intencion, y mira antes si hay un README que ya la tenga escrita — en el
+caso de `keycloak-local-dev` el README decia desde siempre que era de sync manual, y el que mentia
+era el fichero.
+
 ### CRD Too Large Error
 
 **Symptom:**
