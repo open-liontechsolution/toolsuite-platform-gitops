@@ -44,12 +44,21 @@ Longhorn storage; `cloud` targets cloud storage classes with larger replica coun
 
 **The matrix is aspirational — check what actually exists before assuming.** Live namespaces today:
 `data-dev`, `data-casa`, `security-dev`, `security-casa`, plus `data-prod` and `security-prod` added by
-issue #62 — and those two hold **only the production Keycloak and its database**, nothing else. There
-is still **no** `data-qa`, and no `cloud` deployment at all; `apps/data/cnpg` had values and
-Applications for all of them and they were deleted in issue #44 (they had never worked — see below).
-`casa` is a fourth tier, not part of dev/qa/prod: the family/home tools (`authentik-postgres-casa`,
-Authentik). Note the asymmetry `data-prod` creates: `deal_tracker_prod`, the application's own
-production database, still lives in `platform-postgres-dev` under `data-dev`. Only the IdP moved.
+issue #62. There is still **no** `data-qa`, and no `cloud` deployment at all; `apps/data/cnpg` had
+values and Applications for all of them and they were deleted in issue #44 (they had never worked —
+see below). `casa` is a fourth tier, not part of dev/qa/prod: the family/home tools
+(`authentik-postgres-casa`, Authentik).
+
+**`data-prod` now holds all of production's data, and it is one cluster, not one per tenant.** Issue
+#62 created it for the production Keycloak alone, which left `deal_tracker_prod` — the application's
+own production database — sharing `platform-postgres-dev` with dev and QA. Issue #71 closed that
+asymmetry and, in doing so, decided the shape on purpose: **one CNPG cluster per tier**, not one per
+tenant. `apps/data/platform-postgres` (release `platform-postgres-prod`) hosts both `keycloak_prod`
+and `deal_tracker_prod`; it is `apps/data/keycloak-postgres` renamed, since a CNPG cluster's name is
+baked into its PVCs, Services and secrets and renaming it means creating a new one and moving the
+databases across. What that buys and what it costs is written in that chart's `values.yaml`: a PITR
+is **of the whole cluster, not of one database**, so a restore asked for by the IdP still reaches the
+application's data — much smaller than sharing a pod with dev and QA, but not zero.
 
 **Env values nest one level deeper than they look.** In a wrapper chart the subchart's own `cluster`
 section is at `cluster.cluster.*`, not `cluster.*` — the first key is the subchart name in the wrapper.
@@ -123,8 +132,9 @@ duplicated and pruned.
   hop strategy** gated on the target Kubernetes version — read `apps/platform/cert-manager/README.md`
   before touching its version; the recent git history is exactly these staged hops.
 - **There are two Keycloak instances, and the directory decides which realm each one gets.** Since
-  issue #62 production is isolated: `security-prod` / release `keycloak-prod`, its own CNPG cluster
-  (`apps/data/keycloak-postgres` in `data-prod`), its own host `keycloak.liontechsolution.com` served
+  issue #62 production is isolated: `security-prod` / release `keycloak-prod`, its database in
+  `data-prod` (`apps/data/platform-postgres` since issue #71 — it was `apps/data/keycloak-postgres`,
+  which that issue retires), its own host `keycloak.liontechsolution.com` served
   by the **k3s-prod** tunnel. `security-dev` keeps dev and QA — QA authenticates against the
   `deal-tracker-dev` realm, it has no instance of its own. The split is `realmConfig.path`:
   `realms/nonprod` for the dev instance, `realms/prod` for production. The ConfigMap glob does not
