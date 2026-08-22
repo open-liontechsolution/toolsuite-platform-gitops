@@ -5,7 +5,11 @@ aplica `keycloak-config-cli` (issues #49 y #50). Los **usuarios no**, y no es un
 pendiente: es una decision. Este documento la deja escrita, con lo que tendria que cambiar
 para revisarla.
 
-La herramienta es `scripts/keycloak-user.sh`.
+Con una excepcion, que no es una persona y tiene su propia seccion aqui abajo: el **service
+account** del client `deal-tracker-api` (issue #61).
+
+Las herramientas son `scripts/keycloak-user.sh` (alta y baja de personas) y
+`scripts/keycloak-client-secret.sh` (el secreto de un client confidencial, para sellarlo).
 
 ## Por que los usuarios no se declaran en git
 
@@ -26,6 +30,74 @@ Tres razones, y cada una basta por si sola:
 Lo que si queda en git es **el procedimiento**. El primer usuario de produccion se creo con
 `kcadm.sh` a mano desde el pod y no dejo rastro en ningun repositorio — que es exactamente lo
 que la #50 dice que no hay que repetir.
+
+## El unico usuario declarado, y por que no cuenta
+
+Hay **una** excepcion a todo lo anterior, y esta en los dos ficheros de realm de deal-tracker
+(issue #61):
+
+```yaml
+users:
+  - username: service-account-deal-tracker-api
+    enabled: true
+    serviceAccountClientId: deal-tracker-api
+    clientRoles:
+      realm-management:
+        - manage-users
+```
+
+No es una persona: es el **service account** que Keycloak crea solo al encender
+`serviceAccountsEnabled` en el client confidencial `deal-tracker-api`, con el que el backend de
+deal-tracker crea las cuentas del alta por invitacion. Va declarado porque **keycloak-config-cli
+no sabe asignar ese rol de ninguna otra forma**: no es un campo del client, es un `users:` con
+`serviceAccountClientId`, y no hay alternativa en su modelo de configuracion.
+
+Ninguna de las tres razones de arriba le aplica:
+
+1. **«config-cli no sabe borrarlos»** — un service account no se da de baja: se retira borrando su
+   client, y eso si es declarativo.
+2. **«la reconciliacion nocturna los resucitaria»** — aqui esa reconciliacion es la garantia, no el
+   riesgo. Si alguien le anade `realm-admin` a mano desde la consola, el CronJob de las 04:00 lo
+   revierte. Es exactamente el efecto que se quiere.
+3. **«las credenciales de personas no van a un repositorio»** — no hay ninguna: Keycloak lo crea sin
+   contrasena, y el secreto del client no se declara (ver abajo).
+
+**Esto no abre la puerta a declarar usuarios.** La regla que queda escrita es: en `realms/` solo van
+service accounts. Una persona sigue sin poder darse de baja quitandola de un fichero, que es lo que
+hace insostenible declararlas.
+
+`manage-users` es mas de lo que hace falta —permite tambien borrar y deshabilitar—, pero no existe un
+rol builtin de «solo crear»: acotarlo exigiria un rol de cliente a medida. Queda dicho para que la
+decision sea revisable. Lo que **no** hace falta es `view-users`: `UserPermissions.canView()` es
+`hasViewRole() || canManage()`, asi que buscar si el invitado ya existe funciona con `manage-users`
+solo.
+
+### El secreto de ese client: generado por Keycloak, nunca en git
+
+El client es confidencial, pero su secreto **no se declara en el fichero de realm**. Lo genera
+Keycloak al crearlo, y config-cli no lo toca nunca: con `secret` ausente, su
+`ClientImportService.isClientEqual` devuelve `true` **sin llegar a consultar el secreto real**, asi
+que la reconciliacion de las 04:00 no lo rota. Medido: tras forzar una pasada del CronJob, el
+secreto es el mismo.
+
+Se saca del servidor una vez por realm, y por stdout para poder encadenarlo sin que toque disco:
+
+```bash
+./scripts/keycloak-client-secret.sh deal-tracker-dev deal-tracker-api \
+  | kubeseal --raw --from-file=/dev/stdin --namespace deal-tracker-qa --name deal-tracker-config
+```
+
+El ciphertext va a `deal-tracker/overlays/*` de `k3s-local-apps-manifests`, bajo
+`KEYCLOAK_ADMIN_CLIENT_SECRET`. El sellado es **por namespace**: el mismo secreto para dos namespaces
+se sella dos veces y los ciphertexts salen distintos. `deal-tracker-dev` no lo lleva — ese overlay
+borra las `KEYCLOAK_*` a proposito y alli el registro queda apagado por construccion.
+
+A diferencia de la contrasena que reparte `keycloak-user.sh`, **este secreto es de larga vida**: no
+caduca y da acceso a la Admin API del realm. No se guarda en disco ni se pega en un chat.
+
+Ojo con la issue #62: al trasladar `deal-tracker-prod` a su instancia aislada, el fichero de realm
+viaja pero **el secreto no** —la instancia nueva genera otro— y hay que re-sellarlo junto al
+`KEYCLOAK_ISSUER_URL`, que cambia por el host.
 
 ## La politica de alta, mientras no haya SMTP
 

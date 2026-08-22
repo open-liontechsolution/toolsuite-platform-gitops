@@ -12,10 +12,13 @@
 # despues obliga a resellar el secret de `deal-tracker/overlays/prod`.
 #
 # Contrato con los otros dos repos (k3s-local-apps-manifests, deal-tracker):
-#   KEYCLOAK_ISSUER_URL = https://keycloak-dev.liontechsolution.com/realms/deal-tracker-prod
-#   KEYCLOAK_AUDIENCE   = deal-tracker-web
+#   KEYCLOAK_ISSUER_URL          = https://keycloak-dev.liontechsolution.com/realms/deal-tracker-prod
+#   KEYCLOAK_AUDIENCE            = deal-tracker-web
+#   KEYCLOAK_ADMIN_CLIENT_ID     = deal-tracker-api      (el alta por invitacion, issue #61)
+#   KEYCLOAK_ADMIN_CLIENT_SECRET = el que genera Keycloak, sellado alli
 # Estan escritos en deal-tracker/overlays/prod/secret.example.yaml. Si cambia el nombre
-# del realm o del client aqui, alli deja de validar ningun token.
+# del realm o del client aqui, alli deja de validar ningun token. Las dos ultimas son
+# opcionales del lado de la aplicacion: sin ellas arranca igual y el registro responde 503.
 #
 # `webOrigins` espera ORIGENES DESNUDOS. Leer la cabecera de deal-tracker-dev.yaml antes
 # de tocarlo; el template lo rechaza en tiempo de render.
@@ -42,9 +45,12 @@ resetPasswordAllowed: false
 # expuesto a internet por el tunnel.
 bruteForceProtected: true
 
-# Los usuarios NO se declaran en este fichero: keycloak-config-cli no sabe borrarlos, y el
+# Las PERSONAS no se declaran en este fichero: keycloak-config-cli no sabe borrarlas, y el
 # CronJob de reconciliacion de las 04:00 volveria a habilitar cada noche a quien se hubiera
-# dado de baja. Meter credenciales en git es ademas justo lo que la #49 pide evitar. Alta:
+# dado de baja. Meter credenciales en git es ademas justo lo que la #49 pide evitar. El unico
+# `users:` que hay —al final— es el service account de `deal-tracker-api` (issue #61): no es
+# una persona, no tiene contrasena y se retira borrando su client, asi que no le aplica nada de
+# esto. Ahi solo van service accounts; razonado en docs/KEYCLOAK_USERS.md. Alta de personas:
 #
 #   ./scripts/keycloak-user.sh crear deal-tracker-prod <usuario> <correo> [nombre] [apellido]
 #
@@ -113,3 +119,71 @@ clients:
       - organization
       - offline_access
       - microprofile-jwt
+
+  # Client confidencial del BACKEND, para el alta de usuarios por invitacion (issue #61).
+  # No lo usa ningun navegador: no tiene flujo de login, solo client_credentials.
+  #
+  # EL SECRETO NO SE DECLARA AQUI. Lo genera Keycloak al crear el client y config-cli no lo
+  # toca nunca: con `secret` ausente su `ClientImportService.isClientEqual` devuelve true sin
+  # llegar a consultarlo, asi que la reconciliacion de las 04:00 no lo rota. Se extrae con
+  # `scripts/keycloak-client-secret.sh` y se sella en k3s-local-apps-manifests.
+  #
+  # Contrato con el otro lado: KEYCLOAK_ADMIN_CLIENT_ID=deal-tracker-api y
+  # KEYCLOAK_ADMIN_CLIENT_SECRET. Su ausencia apaga el registro entero (503), no rompe el
+  # arranque. Ojo con la #62: al trasladar el realm a la instancia aislada, el secreto NO
+  # viaja —la instancia nueva genera otro— y hay que re-sellarlo junto al KEYCLOAK_ISSUER_URL.
+  - clientId: deal-tracker-api
+    enabled: true
+    protocol: openid-connect
+
+    publicClient: false
+    clientAuthenticatorType: client-secret
+    standardFlowEnabled: false
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    serviceAccountsEnabled: true
+
+    # SIN ESTO LA ADMIN API RESPONDE 403 CON EL ROL BIEN PUESTO. La autorizacion de la Admin
+    # API mira `resource_access.realm-management.roles` DEL TOKEN, no el mapping del usuario:
+    # sin full scope el rol se ve asignado en la consola y el claim no se emite. Es el fallo
+    # mas caro de diagnosticar de todo esto.
+    fullScopeAllowed: true
+
+    # Menos que deal-tracker-web a proposito: este client nunca representa a una persona, asi
+    # que profile/email/web-origins no le sirven de nada. `roles` es el imprescindible, es el
+    # que emite resource_access. Declararlos explicitamente ademas evita que config-cli vea
+    # una diferencia y reescriba el client en cada pasada del CronJob.
+    defaultClientScopes:
+      - roles
+      - basic
+      - acr
+    optionalClientScopes: []
+
+# EL UNICO USUARIO DECLARADO EN ESTE REPO, y no es una persona: es el service account que
+# Keycloak crea solo al encender `serviceAccountsEnabled`. keycloak-config-cli no sabe
+# asignarle su rol de ninguna otra forma —no es un campo del client, es un `users:` con
+# `serviceAccountClientId`— y ninguna de las tres razones por las que los usuarios no se
+# declaran aqui le aplica: no tiene contrasena que guardar, no se da de baja (se retira
+# borrando su client) y la reconciliacion nocturna pasa de riesgo a garantia, porque revierte
+# cualquier rol que alguien le anada a mano. Razonado en docs/KEYCLOAK_USERS.md.
+#
+# Esto NO abre la puerta a declarar a las personas de produccion: aqui solo van service
+# accounts. El alta de personas sigue siendo `scripts/keycloak-user.sh`, por las razones de
+# la cabecera de arriba.
+#
+# `manage-users` es mas de lo que hace falta —permite tambien borrar y deshabilitar—, pero no
+# existe un rol builtin de «solo crear»: acotarlo exigiria un rol de cliente a medida. Queda
+# escrito para que la decision sea revisable y no se herede por omision. Lo que NO hace falta
+# es `view-users`: `UserPermissions.canView()` es `hasViewRole() || canManage()`, asi que
+# buscar si el invitado ya existe funciona con esto solo.
+#
+# No se declaran `realmRoles` (config-cli respeta `default-roles-deal-tracker-prod`, porque
+# `import.behaviors.remove-default-role-from-user` viene false de fabrica) ni los roles del
+# client `account` (a los clients por defecto de Keycloak no les quita nada si no aparecen).
+users:
+  - username: service-account-deal-tracker-api
+    enabled: true
+    serviceAccountClientId: deal-tracker-api
+    clientRoles:
+      realm-management:
+        - manage-users

@@ -86,9 +86,12 @@ networkPolicy:
 # Los ficheros de realms/ se montan en un ConfigMap y los aplica keycloak-config-cli:
 #   - Job con hook PostSync -> corre en cada sync de la Application (cambio intencionado)
 #   - CronJob               -> reaplica sin que nadie sincronice (revierte cambios a mano)
-# Los usuarios NUNCA se tocan: keycloak-config-cli no sabe borrarlos (UserImportService
+# Las PERSONAS no se tocan nunca: keycloak-config-cli no sabe borrarlas (UserImportService
 # registra "Purging users isn't supported" incluso con `users: []`), y los ficheros de
-# realm no los declaran. El auto-registro de usuarios es seguro frente al CronJob.
+# realm no las declaran. El auto-registro de usuarios es seguro frente al CronJob.
+# La unica entrada `users:` que hay en realms/ es el service account de `deal-tracker-api`
+# (issue #61), que no es una persona: config-cli no sabe asignarle su rol de otra forma.
+# Ahi solo van service accounts; razonado en docs/KEYCLOAK_USERS.md.
 realmConfig:
   enabled: false
 

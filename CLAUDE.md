@@ -109,7 +109,7 @@ duplicated and pruned.
   often `appVersion` too) and reconcile. cert-manager upgrades follow a deliberate **one-minor-at-a-time
   hop strategy** gated on the target Kubernetes version — read `apps/platform/cert-manager/README.md`
   before touching its version; the recent git history is exactly these staged hops.
-- **Realms and clients are declared in git; users deliberately are not.** `keycloak-config-cli`
+- **Realms and clients are declared in git; people deliberately are not.** `keycloak-config-cli`
   applies `apps/security/keycloak/realms/*.yaml` (PostSync Job + a nightly reconcile CronJob with
   the checksum cache off). Users stay out for a reason that is easy to get backwards: config-cli
   cannot purge them, and that same nightly reconcile would re-enable anyone you had disabled, so a
@@ -118,6 +118,15 @@ duplicated and pruned.
   `UPDATE_PASSWORD`. Manual signup is the policy, not a gap — the realms have no SMTP, so there is
   no email verification and no password recovery. Reasoning and the trigger to revisit it:
   `docs/KEYCLOAK_USERS.md`.
+  **The one `users:` block in `realms/` is a service account, not a person** — config-cli can only
+  assign a service account's role through a `users:` entry with `serviceAccountClientId`; it is not
+  a client field. Only service accounts go there. Two traps with the confidential client that owns
+  it (`deal-tracker-api`): without `fullScopeAllowed: true` the Admin API returns **403 with the
+  role correctly assigned**, because authorization reads `resource_access.realm-management.roles`
+  from the *token*, not the user's mapping; and its **secret is never declared** — Keycloak
+  generates it and config-cli leaves it alone (with `secret` absent, `isClientEqual` returns true
+  without consulting it), so the nightly job does not rotate it. Extract it with
+  `scripts/keycloak-client-secret.sh` and seal it in `k3s-local-apps-manifests`.
 - **`keycloak/templates/cloudflared.yaml` is intentionally empty** — cloudflared runs as a sidecar via
   `keycloakx.extraContainers`, not as a separate manifest. Don't "fix" it by adding a Deployment.
 - Affinity rules in CNPG env values deliberately target worker nodes labelled `performance=high`; the

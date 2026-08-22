@@ -4,7 +4,7 @@
 # POR QUE EXISTE ESTO, Y POR QUE NO ES UN FICHERO DE realms/
 #
 # Los realms y los clients se declaran en git y los aplica keycloak-config-cli (issues #49
-# y #50). Los usuarios NO, y es deliberado:
+# y #50). Las PERSONAS no, y es deliberado:
 #
 #   * config-cli no sabe borrarlos. `UserImportService` registra "Purging users isn't
 #     supported" incluso con `users: []`, asi que un usuario declarado en git no se puede
@@ -20,6 +20,11 @@
 # Lo que este script arregla no es "que sea automatico", es que el alta DEJE RASTRO y sea
 # siempre la misma. La alternativa —`kcadm.sh` a mano desde el pod— es como se creo el
 # primer usuario de produccion, y no aparece en ningun repositorio.
+#
+# La unica entrada `users:` que hay en realms/ es el service account del client
+# `deal-tracker-api` (issue #61): no es una persona, no tiene contrasena y se retira borrando
+# su client, asi que las tres razones de arriba no le aplican y config-cli no sabe asignarle
+# su rol de otra forma. Su secreto se saca con `scripts/keycloak-client-secret.sh`.
 #
 # EL MODELO DE ALTA: contrasena temporal + UPDATE_PASSWORD forzado.
 # El realm no tiene SMTP (`smtpServer: {}`), asi que `resetPasswordAllowed` es false y NO
