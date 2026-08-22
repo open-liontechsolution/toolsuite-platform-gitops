@@ -115,6 +115,64 @@ ciphertext en vez de a lo que pasa:
 Comprobado en este cluster el 22/08/2026, con las dos caras: los sellados buenos validan y el
 mismo chart renderizado sin `--namespace` falla.
 
+## Quitar una clave de un SealedSecret no la quita del cluster
+
+Borrar una entrada de `encryptedData` en el values, commitear y sincronizar **puede no borrar
+nada**. El objeto vivo se queda con la clave, y el `Secret` desellado tambien.
+
+Pasado el 22/08/2026 al retirar de `security-dev` la clave SMTP de produccion (issue #62): Argo
+sincronizo `Succeeded`, el ConfigMap y el CronJob perdieron la referencia, y la credencial siguio
+ahi tan tranquila.
+
+**Por que.** Server-side apply solo borra los campos que **el propio aplicador** poseia. Si otro
+field manager reclama esa clave, sobrevive:
+
+```bash
+kubectl -n <ns> get sealedsecret <nombre> --show-managed-fields -o json \
+| python3 -c "
+import json,sys
+for m in json.load(sys.stdin)['metadata'].get('managedFields',[]):
+    print(m['manager'], m['operation'])"
+```
+
+Lo que salio:
+
+```
+argocd-controller          Apply     <- ya no reclama la clave: la quito bien
+kubectl-client-side-apply  Update    <- la sigue reclamando. Este es el problema
+```
+
+Ese `kubectl-client-side-apply` es el rastro de los syncs que corrieron **sin** `ServerSideApply`,
+que durante mucho tiempo fueron todos los manuales: la operacion lanzada con `{"sync":{}}` perdia
+esa opcion en silencio (ver el comentario `syncPolicy` de cualquier Application manual). O sea que
+este sintoma es una **secuela** de aquel, y aparece justo cuando por fin se borra un campo.
+
+**El arreglo:** borrar el objeto y dejar que Argo lo recree, para que nazca con un solo dueño.
+
+```bash
+kubectl -n <ns> delete sealedsecret <nombre>
+kubectl -n argocd patch app <app> --type merge \
+  -p '{"operation":{"sync":{"syncOptions":["CreateNamespace=true","ServerSideApply=true"]}}}'
+```
+
+El `Secret` desellado cuelga del `SealedSecret` por `ownerReference`, asi que se va y vuelve con el.
+**Comprueba antes que nadie lo este consumiendo en ese momento** —un Job a medias se queda sin
+credenciales— y despues, que los gestores son solo `argocd-controller` y `controller`.
+
+**Como saber si hay mas objetos asi**, que es lo que de verdad interesa: los que tienen los DOS
+gestores a la vez. Con esto salio uno solo en cinco namespaces, porque es el unico sitio donde se
+habia llegado a borrar un campo:
+
+```bash
+kubectl -n <ns> get <tipo> --show-managed-fields -o json \
+| python3 -c "
+import json,sys
+for o in json.load(sys.stdin).get('items',[]):
+    ms=[m['manager'] for m in o['metadata'].get('managedFields',[])]
+    if any('client-side-apply' in m for m in ms) and any('argocd' in m for m in ms):
+        print(o['kind'], o['metadata']['name'])"
+```
+
 ## Encrypting Secrets
 
 ### Step 1: Encrypt Your Values
