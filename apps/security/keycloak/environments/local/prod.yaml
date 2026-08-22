@@ -41,13 +41,40 @@ keycloakx:
   ingress:
     enabled: false
 
+  # EL LIMITE DE CPU ES DE ARRANQUE, NO DE REGIMEN. Keycloak re-augmenta la imagen de
+  # Quarkus en CADA arranque ("Changes detected in configuration. Updating the server
+  # image"): `KC_DB` llega por variable de entorno y es una opcion de BUILD, asi que el
+  # servidor se reconstruye antes de servir. Ese paso es CPU-bound.
+  #
+  # Con `limits.cpu: 1` —lo que llevaba dev— el pod se queda clavado en 1000m exactos y
+  # la re-augmentacion no termina dentro del presupuesto de la startupProbe: kubelet lo
+  # mata, y al reiniciar vuelve a empezar de cero. Es un bucle, y el sintoma enganna
+  # porque el log se queda en "Please wait" sin un solo error y el pod no reinicia por
+  # fallo propio. Medido el 22/08/2026: 3 reinicios, pod al 100% de su limite y worker3
+  # al 38% de sus 4 nucleos — o sea que la CPU estaba libre y quien apretaba era el
+  # limite.
+  #
+  # En regimen consume 3m. El limite alto solo se usa durante los primeros minutos.
   resources:
     requests:
       cpu: "250m"
       memory: "512Mi"
     limits:
-      cpu: "1"
+      cpu: "3"
       memory: "2Gi"
+
+  # Y el presupuesto de la sonda, por el mismo motivo: 15s + 60*5s = 315s no llegan para
+  # una re-augmentacion en hardware de Raspberry Pi. 15 + 120*5 = 615s (~10 min) si.
+  # No afecta al arranque normal: la sonda deja de contar en cuanto /health responde.
+  startupProbe: |
+    httpGet:
+      path: '{{ tpl .Values.http.relativePath $ | trimSuffix "/" }}/health'
+      port: '{{ .Values.http.internalPort }}'
+      scheme: '{{ .Values.http.internalScheme }}'
+    initialDelaySeconds: 15
+    timeoutSeconds: 1
+    failureThreshold: 120
+    periodSeconds: 5
 
   podLabels:
     app.kubernetes.io/part-of: security-platform
