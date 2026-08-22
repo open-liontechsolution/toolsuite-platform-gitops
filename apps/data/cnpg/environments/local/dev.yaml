@@ -82,42 +82,25 @@ cluster:
         secret:
           name: platform-postgres-app
 
-    # Role de la base de produccion de deal-tracker (#53).
+    # Roles gestionados por el operador (`.spec.managed.roles` del Cluster).
     #
-    # Esto es `cluster.cluster.roles`: la lista que el subchart cuelga de
-    # `.spec.managed.roles` del Cluster. NO es `cluster.managed.roles`, que es
-    # donde uno lo pondria por intuicion y donde no lo lee nadie.
+    # VACIO desde la #71: el unico que habia, `deal_tracker_prod`, se fue con su
+    # base al cluster general de produccion (`apps/data/platform-postgres`, ns
+    # `data-prod`). Aqui ya no queda nada declarado.
     #
-    # Espeja lo que ya tiene `deal_tracker_qa` en este mismo Postgres: entra,
-    # pero no es superusuario ni puede crear bases. La contraseña sale del
-    # SealedSecret `deal-tracker-prod-db` de mas abajo (`roleSecrets`).
+    # OJO con el anidamiento cuando vuelva a haber alguno: esto es
+    # `cluster.cluster.roles`, no `cluster.managed.roles`, que es donde uno lo
+    # pondria por intuicion y donde no lo lee nadie.
     #
-    # Los cinco roles de aplicacion que ya existen (deal_tracker,
+    # Los cinco roles de aplicacion que existen en este Postgres (deal_tracker,
     # deal_tracker_qa, keycloak_dev, tradingtool-dev-user, tradingtool-qa-user)
     # NO estan aqui a proposito: son de antes, creados a mano, y declararlos con
     # `passwordSecret` les resetearia la contraseña de golpe. Se adoptan de uno
-    # en uno, en su propia issue.
-    roles:
-      - name: deal_tracker_prod
-        ensure: present
-        comment: "deal-tracker produccion (Liontech-Solution/deal-tracker#267)"
-        login: true
-        superuser: false
-        createdb: false
-        passwordSecret:
-          name: deal-tracker-prod-db
-        # Estos dos son los defaults que rellena el API server, escritos a mano
-        # a proposito. Argo posee `spec.managed.roles` como lista ATOMICA, asi
-        # que lo que el operador añada dentro le cuenta como diferencia y la
-        # Application se queda OutOfSync para siempre. Medido: sin estas dos
-        # lineas, el sync sale Succeeded y el Cluster sigue OutOfSync.
-        #
-        # La alternativa —un ignoreDifferences sobre /spec/managed/roles— seria
-        # peor: taparia justo los cambios de roles que en un cluster compartido
-        # hay que ver.
-        inherit: true
-        connectionLimit: -1
-    
+    # en uno, en su propia issue. Y ojo: al irse `deal_tracker_prod`, este
+    # cluster se queda SIN NINGUN role declarado, o sea que el reparto entero de
+    # sus bases vuelve a estar fuera de git. Ver README.md.
+    roles: []
+
     # Primary update strategy
     primaryUpdateStrategy: unsupervised
     
@@ -137,30 +120,18 @@ cluster:
         min_wal_size: "128MB"
         max_wal_size: "512MB"
 
-  # Base de produccion de deal-tracker (#53), via el CRD `Database`.
+  # Bases de datos declaradas, via el CRD `Database` (CNPG >= 1.25).
   #
-  # Es la SEGUNDA base declarada de este cluster: la otra es `platform`, que sale
-  # del initdb. Las otras cinco (deal_tracker, deal_tracker_qa, keycloak_dev,
-  # tradingtool-dev, tradingtool-qa) se crearon a mano y no viven en ningun
-  # repositorio; reconstruir este Postgres desde cero es hoy recrearlas a mano y
-  # acordarse de quien era dueño de cada una. Esta issue no arregla eso, solo
-  # evita añadir una sexta al monton.
+  # VACIO desde la #71: `deal_tracker_prod` era la unica, y se fue al cluster
+  # general de produccion. Con `databaseReclaimPolicy: retain` quitarla de aqui
+  # NO dropea nada — la copia vieja sigue en este Postgres, intacta, hasta que
+  # alguien la borre a mano.
   #
-  # El nombre de la base y el del role son CONTRATO con
-  # k3s-local-apps-manifests: van dentro del DATABASE_URL de
-  # `deal-tracker/overlays/prod/secret.example.yaml`. Cambiarlos aqui rompe alli.
-  #
-  # `retain` es el default del CRD, pero se escribe: con `delete`, borrar este
-  # objeto DROPea la base de produccion.
-  #
-  # No se declara el schema `public`. Dev y qa lo tienen ALTERado a mano al role;
-  # aqui se deja como lo hace CNPG de fabrica (dueño `pg_database_owner`), que da
-  # lo mismo en la practica — el dueño de la base es miembro implicito de ese
-  # role y hereda CREATE sobre `public`, que es lo que necesitan las migraciones.
-  databases:
-    - name: deal_tracker_prod
-      owner: deal_tracker_prod
-      databaseReclaimPolicy: retain
+  # Las seis que quedan (platform del initdb, deal_tracker, deal_tracker_qa,
+  # keycloak_dev, tradingtool-dev, tradingtool-qa) se crearon a mano y no viven
+  # en ningun repositorio: reconstruir este Postgres desde cero es hoy recrearlas
+  # a mano y acordarse de quien era dueño de cada una. Ver README.md.
+  databases: []
 
   # Backup logico a MinIO. Forma completa (endpoint, bucket, horario, retencion)
   # en el values.yaml base; aqui solo el interruptor.
@@ -210,22 +181,14 @@ backupSecret:
     accessKeyId: "AgBz1690H1TSK+mWMq+a9CvDgqs69P/AsRSUpF0yNMupfx/yIn0hhgV0P3uBs83roIU22EaH8Bj+UO9mtCX7ETQK0BE1FZSXQpf7PcwwuGlWO0gd0K8PkVMkUiBh0WkYHhqiuCSSeOSGp1VwzwHIKcMsxdZWjflHjy9Pt1G93mgcYWXJ/d/WDZpn3OrDBEKI9lyUqeRU0ocP7XpTTtdH3nlIcGUEPEvYin3rrV3HRkRiamA0CZRoyZ5Ts4cpkNq+sSw0kX8vw+L/20MGu8tRAH17AC+Lz4G8fduBzMY3xJm7M/3kNTYzHmcmQYNzbcPTxWAeBCWfsGLHArayR/deXYX2+pcYMNYYSznT9EWRJXihtoCYglXIUTctysbqHqo56FXdI3nDpgTn6sAMBjI+qJNQzq5u3JmgWEgSldOdevXQT3nT2Ux5d6VSibc2uf+yraOUntl9PS6UTXNIQk/CncDGQGWtq7dsLCi6uXIxqkL1m0tdwysgSC36M4j75dZ+AdAKr4Gi9x+pF9kcNDnBn5khaTZKyyhIqyZWJcfjds7VJitCKp/p7UxlqIDzxVRDGKRVzL+NZSNOaCu30fYhaaVM+HPvzTxg9Ctbg42TLnQ73BitvnGrLWtibVBJO7k2PZ/B0+erqgC7SqJ6HK05wwbvNxKR8TpAxlc4M7ds6u4tjKfD0uk1bS/FSN3Ya9mdSmQXYCvDu7/rvwyEmg=="
     secretAccessKey: "AgAdlNToe/+GPrhVT6Vh1eenUL76/nWW88SZHDd30cv7gh55XT+Dl6up2OF0WFNIlpcEJ2yuEyhG1G9Hyw6JMVOq9SDqT9u/rrHGEZzUL0cX2zvGFjB+VV0BpQR6gRtcp9l8YQxM2eQYACk5fzDmBMNd6uNV8ZtEiFNX+/3SWue9quD/Zs8K2ZgdXtnYQ+79P2dUoCVuzHgPiJnSxj9QOoLYRYjIjyKnk+xYTX5XR3BWPBpBI4U3TsS6SZg7QyJZw9hyUYAKprayCWeAhdnPdMT7Zfk7OTTxxTqn+6ZKR8OE2uCQ7256jqCfIVdNYBeA/McY4zqgXYPuR1hT70+uCussT61bFkRuwr617C6CXpWqWaKxZIFoR2kRFxawTZy/x7b5+Lh/jiBGKUAYFXfzGU0HtfPHBNGoJNB8caI4v2D4yqgmOZE5gR4ezrCAXmrn9cWweFXhvc8n8V72xqphCy6jLbiX8p7b6FUfevsc+FS7jNB6T6QNmOMGsWh7gv5605y8PLLrWYbwLQ3uBdAcj54CbsAkrRl5cUSGAmxVGCnsXT3zOg83vHQd3K98gTG+4zJ9clt8lLkc6YmgcF7UDFxqHsMj8qF7ZbUZyXHlcFkZfH53bRswVbzjKEPjD52948O+Urgnq5W+l0Swome3Z5LQ5qbULp+jlCcr9wRxbr0St2WSb47vh9YqRTLlzU+9ykLeJLmwH/8DJ7a3t9kJC3bD6HFaqkN7ActKHbxlO/E0/5ug6Zrk7/dq"
 
-# Contraseña del role `deal_tracker_prod` (#53). Forma completa y el porque del
-# mapa, en templates/role-sealedsecret.yaml.
+# Contraseñas de los roles de `cluster.cluster.roles`, una por role. Forma
+# completa y el porque del mapa, en templates/role-sealedsecret.yaml.
 #
-# Tipo `kubernetes.io/basic-auth`, no `Opaque` como los dos secrets de arriba:
-# CNPG lo exige para un `passwordSecret`, y ademas compara el `username` de
-# dentro con el nombre del role. Por eso el plaintext de `username` es
-# literalmente `deal_tracker_prod`.
+# VACIO desde la #71: el ciphertext de `deal-tracker-prod-db` se fue con el role
+# al cluster general de produccion, re-sellado alli para el namespace `data-prod`
+# (el sellado va atado a namespace + nombre, asi que el de aqui no valia).
 #
-# El MISMO plaintext esta sellado DOS veces, porque el namespace entra en el
-# cifrado: aqui para `data-dev` (para que CNPG cree el role) y en
-# k3s-local-apps-manifests para `deal-tracker-prod`, dentro del `DATABASE_URL`
-# del Secret `deal-tracker-config`. Los ciphertexts son distintos y NO son
-# intercambiables. Rotarla obliga a re-sellar en los DOS sitios, y en ese orden:
-# primero aqui, que es quien manda sobre el role, y despues el overlay — al
-# reves deja la aplicacion fuera hasta que sincronice esto.
-roleSecrets:
-  deal-tracker-prod-db:
-    username: "AgCHbFMhUq3C6nFSJCkNVCt3Vn3kXP2Z3dXc3x3ZqkPjdqwN1xy5yt57qjp6gbX+915JBr7P8peUcdw9T7DQMRN5akq3yeKJyHuOqgrACOMixz10Alpf63w/3mjyuQsBby1dveKYWhOiXCU6OiBFN/HoM9OetjxdUfEjpMdClqv6h5Eo5BNe4fjTpXs6SKbBHzBqnr3Se8w6Ox+Q3Gzj8Xlc+Z/3gtSzRq9BnNzX1asbsVNvXC2BidCkNjGw6X38ygSoRx4pJe+z0Fol2EmYaV3CqP4S/70PTWI808ij18Wj1ifwBD8Ti4Lfv5O354eH2+2xc0PLOVXG/dw1lIxMuYnHogNA6JYWXetc64R9fHrLJvS1KGF8zyCkxqbsSZJnG+oIBo0pyH0crnzOe/yXuO+qHYvjel9NRf1gCZkjPFNVxKiEybnXvPWDThOguoL7ayIC1NZ/6BkDQQLCEZF7JV/PCqlPCMD3vMU/MNWyNIXB/giiWtaDqxBWjgpwAzZlbfLpPf09iRueIFC2qLdV+VQoceLnB+Wv/UKq14igGgNPZ4ntpmBu6bi/XmwsjxRU7gtTks/40LOOzCFTr0r/9LHj7M8lWB3B3RCHJakhWctlSsv1k5baaQPU5bkDq9o9Uzaa9tBU3NvdnO4jwqjCeGMam2j+KiT3BACX2WStMj+hEsYYBQKpsGCi/hhnwLUDjBA7/GVPXw7GtweJ1thU2ruw9g=="
-    password: "AgAzktVpLnKkopyV7sBqhSDLOfbIuwiSPFfW7NXGqP/hBpZoFd5voIeaenHiw9MnF5LfBx7ngP6n1U7nDSbrXSmvfjBkKN5hpl27742x5bAoolhTInF/sRh/1eCTDbocxeoSXzihnINXcgg0B9R9rEnKCJeFN2NRe5F00Mfs2hmgUrbgzZWRAXBx6f5RideAfSpDv8dfExQZvLV/0Cn2pGtOQornU3DhkskmtLRSHxIo4W7n3OpgJBv5J6VIvNBmYNBiNqlGyt4JLCaDJf6AHCd9mo4tPMnWl6yHUcQYqZzo8isPDMAZ4ankeyLzTH2AdXK6rRtDLrpVWNF8yldKBW21nbi4pWYy/hA/uFCep8xhMw1sPKjruDlwlnfXhegu43UGr1nsSLCaWbfNsewxRANWWS6S+6SPfrgLSbDDorMEOnxw3yIi2ATG61T5mLuIvKJsdIsAY2RoBFksYgV3mJRKTFTjsKuL7HIZoW96gYHtLNVP4yfpkYvsdQPsFPbGgpnK3V2YNdBw2ySU12+tWFQXwjpIfmO9+4DshZsV3lwDq+VOmJYP2ZpKpE9BjDmO4xln0DsR8gAHY0Cm2GVQkbTOatosVjPscTzyGCNtgNhNWXm7OO96wA/emx2mMFWQuSLomhTKG9gJN/6Rp3itq9VVLm/jfryiSNWCQeXPinVdvSvEuTkoW+ygxWBWIkGJUmGk2LMV7OeqGc8j5cn+6PTFodZLylC4jw1tpaYevT0nsO9CSylBePuElotptil/nws="
+# El Secret `deal-tracker-prod-db` que quede en `data-dev` es huerfano: no lo usa
+# ningun role declarado. Se puede borrar a mano cuando se retire la copia vieja
+# de la base.
+roleSecrets: {}

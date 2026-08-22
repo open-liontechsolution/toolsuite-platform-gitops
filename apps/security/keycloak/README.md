@@ -84,9 +84,14 @@ GRANT ALL ON SCHEMA public TO keycloak_dev;
 \q
 ```
 
-**Produccion no se crea asi.** `keycloak_prod` vive en su propio cluster CNPG
-(`apps/data/keycloak-postgres`, ns `data-prod`) y la crea el `bootstrap.initdb` del chart con la
+**Produccion no se crea asi.** `keycloak_prod` vive en `apps/data/platform-postgres`
+(release `platform-postgres-prod`, ns `data-prod`) y la crea el `bootstrap.initdb` del chart con la
 contrasena que trae su SealedSecret: no hay que tocar `psql`. Ese chart va **antes** que este.
+
+Ojo a un cambio de la #71: ese cluster ya **no es exclusivo del IdP**. Es el general del tier de
+produccion y aloja tambien `deal_tracker_prod`. `keycloak_prod` sigue siendo la base de su
+`initdb` —y por eso sus credenciales no cambiaron al mudarse—, pero un PITR de ese cluster ya no
+afecta solo al IdP.
 
 Y no hay entorno `qa`: QA se autentica contra el realm de dev.
 
@@ -208,7 +213,7 @@ Apply the ArgoCD Application manifest:
 # Instancia de dev/QA
 kubectl apply -f argocd/clusters/local/dev.yaml
 
-# Instancia de produccion (requiere apps/data/keycloak-postgres desplegado antes)
+# Instancia de produccion (requiere apps/data/platform-postgres desplegado antes)
 kubectl apply -f argocd/clusters/local/prod.yaml
 ```
 
