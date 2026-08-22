@@ -2,8 +2,12 @@
 
 Los **realms y clients** de este cluster se declaran en `apps/security/keycloak/realms/` y los
 aplica `keycloak-config-cli` (issues #49 y #50). Los **usuarios no**, y no es una tarea
-pendiente: es una decision. Este documento la deja escrita, con lo que tendria que cambiar
-para revisarla.
+pendiente: es una decision. Este documento la deja escrita.
+
+Se reviso cuando toco —la #60 puso servidor de correo en los realms, que era el disparador que
+este documento tenia anotado— y la decision se sostuvo: ninguna de las tres razones por las que
+los usuarios no se declaran dependia del correo. El apartado «La politica de alta» cuenta que
+cambio y que no.
 
 Con una excepcion, que no es una persona y tiene su propia seccion aqui abajo: el **service
 account** del client `deal-tracker-api` (issue #61).
@@ -110,29 +114,50 @@ Ojo con la issue #62: al trasladar `deal-tracker-prod` a su instancia aislada, e
 viaja pero **el secreto no** —la instancia nueva genera otro— y hay que re-sellarlo junto al
 `KEYCLOAK_ISSUER_URL`, que cambia por el host.
 
-## La politica de alta, mientras no haya SMTP
+## La politica de alta, ahora que hay SMTP
 
-**Alta manual, contrasena temporal, cambio obligatorio en el primer login.** Sin auto-registro
-y sin invitacion.
+**El disparador se cumplio.** Este apartado decia que la politica se revisaba el dia que hubiera
+servidor de correo en los realms; ese dia fue la issue #60. Lo que cambio y lo que no:
 
-El motivo es una sola linea de los ficheros de realm: `smtpServer: {}`. Sin servidor de correo
-Keycloak no puede mandar nada, y de ahi salen dos consecuencias que mandan sobre todo lo demas:
+**Lo que cambio.** Los dos realms de deal-tracker tienen `smtpServer` contra Resend, y con el:
 
-- `resetPasswordAllowed: false` — **no hay "he olvidado mi contrasena"**. La recuperacion pasa
-  siempre por un administrador ejecutando `reset`.
-- `verifyEmail: false` — no se puede comprobar que el correo de alta es de quien dice serlo.
+- `resetPasswordAllowed: true` — **ya existe "he olvidado mi contrasena"**. La recuperacion deja de
+  pasar por un administrador ejecutando `reset` y por un canal fuera de banda. `keycloak-user.sh
+  reset` sigue estando, pero como red de emergencia, no como unico camino.
+- `verifyEmail: true` — se puede comprobar que el correo del alta es de quien dice serlo. Ojo:
+  **solo muerde a los usuarios con `emailVerified: false`**. El alta de `keycloak-user.sh` los crea
+  ya verificados (la persona la ha dado de alta un administrador, no un desconocido), asi que a los
+  que salen de este documento no les afecta.
+- Existe una `passwordPolicy`: `length(12) and notUsername and notEmail and passwordHistory(3)`.
+  Antes no habia ninguna, o sea que la contrasena que pusiera un usuario nuevo no tenia ningun
+  minimo. No es retroactiva: actua al fijar una contrasena nueva, incluida la del `UPDATE_PASSWORD`
+  forzado. Y como el alta por invitacion fija la contrasena por la Admin API, el realm es el unico
+  sitio donde esa politica puede vivir.
 
-Con auto-registro sobre esa base, cualquiera podria registrarse con un correo ajeno, y el
-primero que olvidase su contrasena se quedaria fuera para siempre. Por eso el alta es manual:
-no es que falte automatizarla, es que **el auto-registro no es seguro hasta que haya SMTP**.
+**Lo que NO cambio, y es lo importante de este documento.** Las personas siguen sin declararse en
+`realms/`, por las tres razones de arriba — y ninguna de las tres dependia del correo:
+config-cli sigue sin saber borrarlas, el CronJob de las 04:00 seguiria resucitando cada baja, y sus
+credenciales seguirian sin pintar en un repositorio. El alta manual con `keycloak-user.sh` sigue
+siendo el procedimiento para las personas que no entran por invitacion.
 
-**El disparador para revisar esto es configurar SMTP en el realm.** Ese dia se puede encender
-`verifyEmail`, `resetPasswordAllowed` y decidir con criterio entre auto-registro e invitacion.
-La contrasena del servidor de correo entraria por var-substitution desde un SealedSecret, nunca
-en claro en el fichero de realm.
+**Y `registrationAllowed` sigue en `false`.** Eso tampoco lo desbloquea el SMTP: el alta de la
+v0.8.0 de deal-tracker es **por invitacion** —la crea el backend por la Admin API tras canjear un
+token de un solo uso, con el client `deal-tracker-api` de aqui arriba—, no la pagina de registro de
+Keycloak. Abrir el auto-registro es una decision de producto, no una consecuencia tecnica de tener
+correo.
 
-Mientras tanto la escala lo hace sostenible: produccion se estrena con un punado de usuarios
-dados de alta uno a uno.
+Asi que a partir de aqui hay **dos** caminos de alta, y conviene no confundirlos:
+
+| | quien la ejecuta | para quien |
+|---|---|---|
+| `scripts/keycloak-user.sh crear` | un administrador, desde este repo | quien no recibe invitacion |
+| alta por invitacion | el backend de deal-tracker, por la Admin API | el invitado de la v0.8.0 |
+
+La contrasena del servidor de correo **no esta en los ficheros de realm**: entra por
+var-substitution (`$(env:SMTP_PASSWORD_DEAL_TRACKER_*)`) desde el SealedSecret
+`keycloak-realm-smtp`. Hay una clave por realm, porque cada uno manda desde su propio dominio
+verificado. Los detalles y las trampas de encender eso estan en
+`apps/security/keycloak/README.md`.
 
 ## Como
 

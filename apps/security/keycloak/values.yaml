@@ -82,6 +82,20 @@ networkPolicy:
   # Database namespace for cross-namespace connectivity
   databaseNamespace: ""
 
+  # Salida al servidor de correo (issue #60). Es la UNICA regla de la policy con `ipBlock`,
+  # y por tanto la unica que sale de verdad a internet: las demas van por
+  # `namespaceSelector`, que solo casa pods del cluster. Sin esto no sale un correo y el
+  # sintoma no señala a la policy.
+  smtp:
+    enabled: false
+    port: 587
+    # Los rangos privados fuera: abrir la salida a internet no tiene por que ser abrir la
+    # salida al resto del cluster ni a la red de casa.
+    except:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+
 # Realms declarados en git (issue #49)
 # Los ficheros de realms/ se montan en un ConfigMap y los aplica keycloak-config-cli:
 #   - Job con hook PostSync -> corre en cada sync de la Application (cambio intencionado)
@@ -116,6 +130,20 @@ realmConfig:
     name: keycloak-admin-credentials
     userKey: KEYCLOAK_ADMIN
     passwordKey: KEYCLOAK_ADMIN_PASSWORD
+
+  # `$(env:VARIABLE)` dentro de los ficheros de realm (issue #60). Es lo que permite que la
+  # contrasena del SMTP este declarada sin estar escrita. Ojo al encenderlo: una variable que
+  # falte aborta el import de TODOS los realms, no solo del que la usa.
+  varSubstitution:
+    enabled: false
+
+  # Las contrasenas del servidor de correo, una por realm. El nombre de cada clave es a la vez
+  # la clave del Secret, la variable de entorno y lo que se escribe en `$(env:...)`.
+  # Los ciphertexts van en el values del entorno: el sellado es por namespace.
+  smtpSecret:
+    enabled: false
+    name: keycloak-realm-smtp
+    encryptedData: {}
 
   # El checksum del fichero importado. Por defecto config-cli lo cachea y se salta la
   # aplicacion si el fichero no cambio, lo que dejaria al CronJob sin efecto: el fichero

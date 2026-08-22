@@ -14,7 +14,8 @@
 # Este fichero es deliberadamente minimo: declara lo que nos importa, no un export
 # completo. Lo no declarado se queda como esta (import.managed.*=no-delete).
 # Las PERSONAS no se declaran aqui: keycloak-config-cli no sabe borrar usuarios, y el CronJob
-# de reconciliacion desharia cada noche cualquier baja. Se dan de alta con
+# de reconciliacion desharia cada noche cualquier baja. Eso no cambia con el SMTP de la #60 —
+# ninguna de esas dos razones dependia del correo. Se dan de alta con
 # `scripts/keycloak-user.sh`; el porque esta en docs/KEYCLOAK_USERS.md.
 # El unico `users:` de este fichero —al final— es el service account de `deal-tracker-api`, que
 # no es una persona y al que no le aplica ninguna de esas razones. Ahi solo van service
@@ -28,14 +29,52 @@ loginWithEmailAllowed: true
 duplicateEmailsAllowed: false
 editUsernameAllowed: false
 
-# Sin auto-registro: los usuarios se dan de alta a mano. No es un pendiente, es la politica
-# —sin SMTP no hay verificacion de correo ni recuperacion de contrasena, asi que el
-# auto-registro dejaria fuera para siempre al primero que olvidase la suya. Razonado en
-# docs/KEYCLOAK_USERS.md; produccion lo declara igual en su propio fichero de realm.
+# Servidor de correo (issue #60). LA CONTRASENA NO ESTA AQUI: es la API key de Resend y entra
+# por var-substitution desde el SealedSecret `keycloak-realm-smtp`, que config-cli recibe como
+# variable de entorno. Ese `$(env:...)` solo se resuelve con
+# `realmConfig.varSubstitution.enabled`; si la variable falta, el import de los DOS realms
+# aborta en vez de escribir la cadena literal como contrasena.
+#
+# El remitente es el de QA a proposito, no el de produccion: este realm es el que autentica
+# QA, y su dominio verificado en Resend es otro. Tiene que coincidir con el
+# `INVITE_FROM_EMAIL` del backend de ese entorno (deal-tracker#545), o el usuario recibe la
+# invitacion desde un sitio y la recuperacion desde otro, que es lo que cualquiera lee como
+# phishing.
+#
+# Y ojo con la NetworkPolicy: el 587 se abre en `networkPolicy.smtp` del chart. Sin esa regla
+# no sale un correo y el sintoma no señala ahi.
+smtpServer:
+  host: smtp.resend.com
+  port: "587"
+  auth: "true"
+  starttls: "true"
+  ssl: "false"
+  user: resend
+  password: $(env:SMTP_PASSWORD_DEAL_TRACKER_DEV)
+  from: no-reply@dealtracker-qa.liontechsolution.com
+  fromDisplayName: Deal Tracker QA
+
+# Con SMTP ya se puede: recuperar la contrasena sin pasar por un administrador, y comprobar
+# que el correo del alta es de quien dice serlo.
+verifyEmail: true
+resetPasswordAllowed: true
+
+# SIGUE EN false, y el motivo ya NO es la falta de correo —esa razon se fue con el bloque de
+# arriba—. El alta de la v0.8.0 es POR INVITACION: la crea el backend por la Admin API tras
+# canjear un token de un solo uso, no la pagina de registro de Keycloak. Abrir esto convertiria
+# el producto en otro, y es una decision de producto, no tecnica.
 registrationAllowed: false
 registrationEmailAsUsername: false
-verifyEmail: false
-resetPasswordAllowed: false
+
+# Hoy no habia ninguna, o sea que una contrasena nueva no tenia ningun minimo. Como el alta por
+# invitacion fija la contrasena POR LA ADMIN API, el realm es el unico sitio donde esa politica
+# puede vivir: si no esta aqui, no esta en ninguna parte.
+#
+# Longitud y nada de composicion, siguiendo NIST 800-63B: exigir mayuscula/digito/simbolo
+# produce `Password1!` y contrasenas reutilizadas, no entropia. `passwordHistory(3)` evita que
+# el UPDATE_PASSWORD forzado se resuelva repitiendo la temporal que reparte keycloak-user.sh.
+# No es retroactiva: solo actua al fijar una contrasena nueva.
+passwordPolicy: "length(12) and notUsername and notEmail and passwordHistory(3)"
 
 clients:
   - clientId: deal-tracker-web

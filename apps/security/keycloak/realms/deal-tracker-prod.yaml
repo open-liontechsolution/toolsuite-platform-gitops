@@ -31,15 +31,55 @@ loginWithEmailAllowed: true
 duplicateEmailsAllowed: false
 editUsernameAllowed: false
 
-# Alta manual, decidido para el estreno. Sin SMTP configurado en la instancia no hay
-# verificacion de correo NI recuperacion de contrasena: con auto-registro, un usuario
-# que olvide la suya se quedaria fuera para siempre. Cuando haya SMTP se cambia aqui,
-# y la contrasena del servidor de correo entra por var-substitution desde un
-# SealedSecret, nunca en claro en este fichero.
+# Servidor de correo (issue #60). LA CONTRASENA NO ESTA AQUI: es la API key de Resend y entra
+# por var-substitution desde el SealedSecret `keycloak-realm-smtp`, que config-cli recibe como
+# variable de entorno. Si esa variable falta, el import de los DOS realms aborta en vez de
+# escribir la cadena literal como contrasena.
+#
+# CLAVE Y REMITENTE PROPIOS, distintos de los del realm de dev/QA. Ese realm manda desde
+# `dealtracker-qa.liontechsolution.com` con su clave; este desde el dominio de produccion con
+# la suya. Es el mismo criterio que ya se aplico al bot de Telegram en deal-tracker: un correo
+# de pruebas no puede pasar por el remitente de produccion, y una fuga de la clave de QA no
+# puede alcanzar a este dominio.
+#
+# Tiene que coincidir con el `INVITE_FROM_EMAIL` del backend de produccion
+# (deal-tracker#545): el usuario recibe la invitacion de la aplicacion y la recuperacion de
+# Keycloak, y que vengan de sitios distintos es una señal de phishing para cualquiera que mire.
+smtpServer:
+  host: smtp.resend.com
+  port: "587"
+  auth: "true"
+  starttls: "true"
+  ssl: "false"
+  user: resend
+  password: $(env:SMTP_PASSWORD_DEAL_TRACKER_PROD)
+  from: no-reply@dealtracker.liontechsolution.com
+  fromDisplayName: Deal Tracker
+
+# Con SMTP ya se puede: recuperar la contrasena sin que un administrador la reparta por un
+# canal fuera de banda, y comprobar que el correo del alta es de quien dice serlo. Los dos
+# usuarios que hoy tiene este realm ya estan con el correo verificado, asi que encender
+# `verifyEmail` no deja a nadie fuera (medido el 22/08/2026).
+verifyEmail: true
+resetPasswordAllowed: true
+
+# SIGUE EN false, y el motivo ya NO es la falta de correo —esa razon se fue con el bloque de
+# arriba—. El alta de la v0.8.0 es POR INVITACION: la crea el backend por la Admin API tras
+# canjear un token de un solo uso, no la pagina de registro de Keycloak. Abrir esto convertiria
+# el producto en otro, y es una decision de producto, no tecnica.
 registrationAllowed: false
 registrationEmailAsUsername: false
-verifyEmail: false
-resetPasswordAllowed: false
+
+# Hoy no habia ninguna, o sea que una contrasena nueva no tenia ningun minimo, y aqui son
+# contrasenas de personas reales con el login expuesto por el tunnel. Como el alta por
+# invitacion fija la contrasena POR LA ADMIN API, el realm es el unico sitio donde esa politica
+# puede vivir: si no esta aqui, no esta en ninguna parte.
+#
+# Longitud y nada de composicion, siguiendo NIST 800-63B: exigir mayuscula/digito/simbolo
+# produce `Password1!` y contrasenas reutilizadas, no entropia. `passwordHistory(3)` evita que
+# el UPDATE_PASSWORD forzado se resuelva repitiendo la temporal que reparte keycloak-user.sh —
+# que aqui no es hipotetico: hay uno pendiente ahora mismo.
+passwordPolicy: "length(12) and notUsername and notEmail and passwordHistory(3)"
 
 # A diferencia de dev: aqui las contrasenas son de personas reales y el login esta
 # expuesto a internet por el tunnel.

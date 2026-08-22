@@ -128,9 +128,31 @@ sealedSecret:
 networkPolicy:
   enabled: true
   databaseNamespace: "data-dev"
+  # Salida a smtp.resend.com:587 (issue #60). Ver el values base.
+  smtp:
+    enabled: true
 
 # Realms declarados en git (issue #49). El resto de la configuracion esta en el
 # values.yaml base; aqui solo se enciende y se apunta al Service de esta release.
 realmConfig:
   enabled: true
   keycloakUrl: "http://keycloak-dev-http"
+
+  # La contrasena del SMTP entra por `$(env:...)` desde el SealedSecret de abajo (issue #60).
+  varSubstitution:
+    enabled: true
+
+  # Una clave por realm: los dos mandan desde dominios verificados distintos en Resend
+  # (`dealtracker-qa.…` y `dealtracker.…`), asi que la de QA no puede servir para mandar como
+  # produccion. El nombre de cada clave es tambien la variable de entorno y lo que aparece en
+  # `$(env:...)` en el fichero de realm correspondiente.
+  #
+  # Sellados contra el namespace `security-dev` y el nombre `keycloak-realm-smtp`:
+  #   echo -n "<api key>" | kubeseal --raw --from-file=/dev/stdin \
+  #     --namespace security-dev --name keycloak-realm-smtp
+  smtpSecret:
+    enabled: true
+    name: keycloak-realm-smtp
+    encryptedData:
+      SMTP_PASSWORD_DEAL_TRACKER_DEV: AgAL4MVhQP9kxUU4yEqt+Kdtp/NH9+TYNTOgv2N+ILr3NKn/0R3W58UUDYJYg5XO5RjxD1Sv7oOyJ0x33sD09Z4METiepPXbZatZE0Jm+r5Qnoc+UDohz234MXt4JU4aJrEkXPFXh4gF2O3BdsTB3Hh6yuVVIiSaaiF3W4vVuMK0nZjxgSbedh2nmYifkJUOfORRT5rnXB0X91V74MCHF4LX6b5e9LXXLD29kvTgJmFu+Of84a5MHekyQE4eJUxgNrNt09Af2aM2t2B5rAYYHQSAOqd7V7p9Ltd/Ee/AJW6cFlxkrf5MvXG0H2r61W3abl2K5b1oYjYRxbVBMacZHPYRVsFrWr+3PBpS2vzLqekQQsXaVO+FNTslPxDxs20DavUeDmepbj/zt7RErqdyKgGlCC1pG7mCqBSIpZl16oRl+1dGIwlrqaZGGUDSNJlo7Tr2sZxeFl6cwi3ililWg9N5asejzRTZI55Pq98ZRVA8ufEDYArMED/j9UX3ytbg2Xp27W0xJ9iVBn3uwerP7+J2zd59prCbkJURTVmq/F51bbsaNWFMF07y4aVWrrz08vQdIVgzErHVaUu+3qq31U60U0SSkBx9pFZ9dpDxxZv3K7/6pvnnUSw6BLC8OPyT2tyPStEkQpM8iVLwHM7McPO9m5+eMouFI4TUTUQIpL9B4XuqCHxwRKzmrIIJTOzMj5CBcBOAk0GZz+wBwj4X0NB51UjoNFc1GbCp/x7y3fk3kgfaWX8=
+      SMTP_PASSWORD_DEAL_TRACKER_PROD: AgB3lyUenzta5vXsg/kprtPwt5ove7VBVCT9/ttcASBGLPHplvdT3cwcMGNCtoHri5W15xvvoDMzIzXor0xy4Rl0zhUuDO5f2wReBvqrH7UoMP7OEayYeLr2RWjGVQwkLx1MKulvSgA+kTq8HXyg/H0pAM9Z+jz6t3R7QHaVW0CHmvkupG3QQZzxPfOXMT6YO14qu9B+aBJeHqtTd6fVacyawLVHveEGN/FiYoCwouBJNfCcvEQijSh6icfbqUfLC5CGNNNrfyPz83p3sxdMG1jXEKbiWiMdpendwpMvHUmoambwyJNDeQgKohYS/IrbF5JBLFXzZakgjReSLk+RdfvOrRa6dc6YoEqn0Vo2lVC/yKCHozubsDp+dtjv0++aEEyaFPK0zjoMhDy61LZNTyk1Q02DsXzgIGWy10Wv9dO6H/Hh/LFRKl72Q6qzd8dZQqzqSu+z0NHpToNpwXH8lfnYaCXRcabwKa3Jr7U4A+AINl6wO866oXJsqVwf5VGSi8Vv3GHUh0bMt94UxRN4JKa2vAx3fxkekEk/WaXaJTuP+2qykNrT/7QV65hsiEOvED7YnnEkk+aw9masISa5HduCuMLzZKx8psRT4bpVlIcEyOlMlnuPKuNCxnmTHEYfjRc7ZC5Iy8jD9XDgfZRT+IbHl1lmV1EznwZoo/eH+P61/ukp3w1iz7UHCCH2GOtLoyh2Y1PyQc4CrVTPRlg2OeQjaQe2sj5nPJsVozfGFGq8wsFf5UQ=

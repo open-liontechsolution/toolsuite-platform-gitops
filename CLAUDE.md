@@ -115,9 +115,19 @@ duplicated and pruned.
   cannot purge them, and that same nightly reconcile would re-enable anyone you had disabled, so a
   declared user could never be offboarded. They are managed with `scripts/keycloak-user.sh`
   (`crear`/`listar`/`reset`/`baja`), which hands out a **temporary** password and forces
-  `UPDATE_PASSWORD`. Manual signup is the policy, not a gap — the realms have no SMTP, so there is
-  no email verification and no password recovery. Reasoning and the trigger to revisit it:
+  `UPDATE_PASSWORD`. Manual signup is the policy, not a gap, and it stays one now that SMTP exists:
+  none of the three reasons users are undeclarable depended on email. Reasoning:
   `docs/KEYCLOAK_USERS.md`.
+- **The realms do have SMTP now** (Resend, issue #60), with `resetPasswordAllowed`, `verifyEmail`
+  and a `passwordPolicy` — `registrationAllowed` stays `false` because signup is by invitation, not
+  because email is missing. Three traps: the SMTP password is **not** in `realms/` but comes in by
+  var-substitution (`$(env:…)`, prefix `$(` not `${`, enabled by `realmConfig.varSubstitution`), and
+  a **missing variable aborts the import of both realms**, not just its own; there is **one key per
+  realm** because each sends from its own verified domain; and the egress NetworkPolicy rule for
+  port 587 (`networkPolicy.smtp`) is the **only rule in that policy that actually reaches the
+  internet** — the others use `namespaceSelector`, which only ever matches in-cluster pods, so
+  adding a port there does nothing. Without it Keycloak sends no mail and the symptom reads as "it
+  doesn't arrive", not as a blocked socket.
   **The one `users:` block in `realms/` is a service account, not a person** — config-cli can only
   assign a service account's role through a `users:` entry with `serviceAccountClientId`; it is not
   a client field. Only service accounts go there. Two traps with the confidential client that owns
