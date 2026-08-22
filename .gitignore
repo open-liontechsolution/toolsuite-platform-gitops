@@ -6,3 +6,7 @@ charts/
 # Plaintext secret inputs for the sealing helpers (never commit the real ones)
 scripts/*-secrets.env
 !scripts/*-secrets.env.example
+
+# Volcados del navegador de Playwright (snapshots y logs de consola de una sesion de
+# depuracion). No son artefactos del repo y se cuelan solos con un `git add -A`.
+.playwright-mcp/
