@@ -1,0 +1,201 @@
+# Cluster CNPG GENERAL del tier de PRODUCCION, namespace data-prod (issue #71).
+#
+# QUE ALOJA, Y POR QUE ESTAN JUNTOS: `keycloak_prod` (el IdP de produccion, que
+# llego aqui con la #62) y `deal_tracker_prod` (los datos de produccion de
+# deal-tracker, que llegaron con la #71 desde `platform-postgres-dev`). La
+# decision se tomo a proposito y es la que pedia la #71: un cluster POR TIER, no
+# uno por inquilino. La #62 habia sentado el precedente contrario —un CNPG
+# dedicado a un solo IdP, igual que apps/data/authentik-postgres— y se revisa
+# aqui antes de que hubiera tres.
+#
+# LO QUE SE GANA: produccion deja de depender de la infraestructura de dev, que
+# era el problema de verdad. LO QUE SE ACEPTA A CAMBIO, escrito para que se
+# decida con datos y no de memoria: el restore de CNPG es DEL CLUSTER ENTERO, no
+# de una base, asi que un PITR pedido por el IdP se lleva por delante los datos
+# de la aplicacion, y al reves. Es un riesgo mucho menor que el que se cierra
+# —los dos inquilinos son produccion y su rotura importa igual, mientras que
+# antes un error de dev alcanzaba a produccion— pero no es cero.
+#
+# ESTE CHART SUSTITUYE A apps/data/keycloak-postgres, que se retira. El nombre de
+# un Cluster de CNPG esta grabado en PVCs, Services y secretos, asi que
+# renombrarlo fue crear este y trasladarle las dos bases.
+cluster:
+  mode: standalone
+  type: postgresql
+
+  nameOverride: ""
+  fullnameOverride: ""
+
+  cluster:
+    instances: 3
+    imageName: ghcr.io/cloudnative-pg/postgresql:16.4
+
+    storage:
+      size: 20Gi
+      storageClass: ""
+
+    walStorage:
+      enabled: true
+      size: 1Gi
+      storageClass: ""
+
+    resources:
+      requests:
+        cpu: "1000m"
+        memory: "2Gi"
+      limits:
+        cpu: "4000m"
+        memory: "8Gi"
+
+    primaryUpdateStrategy: unsupervised
+
+    affinity:
+      topologyKey: kubernetes.io/hostname
+
+    # Monitoring: el objeto PodMonitor NO es nuestro. Lo declara
+    # k3s-local-apps-manifests (`prometheus/cnpg/podmonitor.yaml`, ns `monitoring`).
+    # Encenderlo aqui crearia un segundo PodMonitor y duplicaria el scrape.
+    # `prometheusRule` tampoco sirve: las reglas del chart no llevan la etiqueta
+    # `prometheus: prometheus-persistant` y el ruleSelector las ignoraria en silencio.
+    # Explicacion larga en apps/data/cnpg/values.yaml.
+    #
+    # OJO: ese PodMonitor lleva hoy un `namespaceSelector` sobre `data-dev` y
+    # `data-casa`, asi que ESTE CLUSTER NO SE SCRAPEA hasta que se anada `data-prod`
+    # alli. Es un cambio de aquel repo, no de este.
+    monitoring:
+      enabled: false
+      podMonitor:
+        enabled: false
+      prometheusRule:
+        enabled: false
+
+    # La base del initdb es la del IdP, y eso es DELIBERADO aunque este cluster sea
+    # general. `initdb` da UNA base y su role, y sus credenciales ya estaban selladas
+    # DOS VECES cuando se hizo el traslado (aqui bajo `sealedSecret`, y contra
+    # `security-prod` bajo `KC_DB_PASSWORD` en el chart del Keycloak). Reaprovecharlas
+    # dejo el traslado del IdP en un solo valor a re-sellar, `KC_DB_URL_HOST`.
+    #
+    # Consecuencia para quien venga: el resto de inquilinos NO entran por aqui. Se
+    # declaran en `cluster.databases` + `cluster.cluster.roles` + `roleSecrets`, que
+    # es el mecanismo nativo desde CNPG 1.25 y el que usa `deal_tracker_prod`.
+    #
+    # La ruta es `cluster.cluster.initdb`. NO `cluster.cluster.bootstrap.initdb`: el
+    # subchart arma el bloque `bootstrap:` el solo a partir de `initdb`, y un
+    # `bootstrap:` escrito a mano se ignora en silencio (ver #70).
+    initdb:
+      database: keycloak_prod
+      owner: keycloak_prod
+      secret:
+        name: keycloak-postgres-app
+
+    # Roles gestionados por el operador (`.spec.managed.roles` del Cluster).
+    #
+    # OJO con el anidamiento: esto es `cluster.cluster.roles`, no
+    # `cluster.managed.roles`. El bloque `managed:` lo construye el subchart en
+    # `cluster/templates/cluster.yaml`; nosotros solo le damos la lista. Ponerlo
+    # un nivel mas arriba es el fallo silencioso de siempre: Helm lo acepta, el
+    # subchart lo ignora y el role no se crea.
+    #
+    # La contrasena de cada role va aparte, en `roleSecrets` (mas abajo), porque
+    # tiene que ser un Secret de tipo basic-auth.
+    #
+    # ATENCION al declarar un role que YA EXISTE en el cluster: darle un
+    # `passwordSecret` hace que CNPG le RESETEE la contrasena a la del secret. Si
+    # el valor no es exactamente el que usa hoy, la aplicacion que lo use se cae.
+    # Los roles preexistentes se adoptan de uno en uno y con verificacion entre
+    # medias, nunca en lote.
+    roles: []
+
+  # Bases de datos declaradas, via el CRD `Database` (CNPG >= 1.25). Las
+  # renderiza `cluster/templates/databases.yaml` del subchart; la lista vacia es
+  # el gate. Es la puerta de entrada de todo inquilino que no sea el del initdb.
+  #
+  # `databaseReclaimPolicy` se escribe explicito aunque `retain` sea el default
+  # del CRD: con `delete`, borrar el objeto Database DROPea la base.
+  databases: []
+
+  # Backup logico del operator (barmanObjectStore -> MinIO). Aqui viven los
+  # usuarios del IdP de produccion y el historico de precios de la aplicacion:
+  # sin esto, un `DROP TABLE` o una corrupcion se los lleva. Las replicas de
+  # Longhorn cubren la perdida de disco, no un borrado.
+  #
+  # Mismo bucket y misma credencial que apps/data/cnpg, sellada aparte porque el
+  # SealedSecret va atado al namespace. Detalle de cada campo alli.
+  #
+  # `enabled` se enciende en el values de entorno, junto con `backupSecret`: sin
+  # la credencial sellada el archivado de WAL falla y el Cluster se queda con la
+  # condicion ContinuousArchiving en False.
+  #
+  # Nota de caducidad: el barmanObjectStore in-tree esta deprecado desde CNPG 1.26
+  # y desaparece en 1.31 (vamos por 1.28.1). La migracion al plugin barman-cloud
+  # (CNPG-I) va en issue aparte; implica subir el chart `cluster` 0.6.1 -> 0.8.x y
+  # traducir este bloque a un CR ObjectStore.
+  backups:
+    enabled: false
+    provider: s3
+    endpointURL: "http://192.168.50.240:9000"
+    destinationPath: "s3://cnpg-backup"
+    secret:
+      create: false
+      name: cnpg-backup-s3-creds
+    wal:
+      compression: gzip
+      encryption: ""
+      maxParallel: 1
+    data:
+      compression: gzip
+      encryption: ""
+      jobs: 2
+    retentionPolicy: "30d"
+    scheduledBackups:
+      - name: daily-backup
+        # 02:15 UTC, escalonado respecto a platform-postgres-dev (01:30),
+        # authentik-postgres (01:45) y el que fue keycloak-postgres-prod (02:00):
+        # todos suben al mismo MinIO por la misma LAN.
+        schedule: "0 15 2 * * *"
+        backupOwnerReference: self
+        method: barmanObjectStore
+
+# Credenciales de la base del IdP (username/password del role `keycloak_prod`), la
+# que crea el initdb. EL MISMO PLAINTEXT del `password` va sellado una segunda vez,
+# contra el namespace `security-prod`, en
+# apps/security/keycloak/environments/local/prod.yaml bajo `KC_DB_PASSWORD`. Son dos
+# ciphertexts distintos del mismo secreto: el sellado va atado a namespace + nombre.
+# Si se rota, se rotan LOS DOS en el mismo commit.
+sealedSecret:
+  enabled: false  # Se enciende en el values del entorno
+  name: keycloak-postgres-app
+  encryptedData:
+    # echo -n "keycloak_prod" | kubeseal --raw --from-file=/dev/stdin --namespace data-prod --name keycloak-postgres-app --controller-name sealed-secrets --controller-namespace kube-system
+    username: ""
+    password: ""
+
+# Credencial S3 del barmanObjectStore (usuario `cnpg-backup` del MinIO). Mismo
+# plaintext que en apps/data/cnpg y apps/data/authentik-postgres, sellado para el
+# namespace data-prod. Ver templates/backup-s3-sealedsecret.yaml.
+#
+# NO se sella a mano: la gobierna juanjocop/kxs-ansible (`roles/minio_creds`,
+# `playbooks/minio_creds.yml`), que deja los ciphertexts en
+# `out/cnpg-backup-s3-creds.yaml`. Su `minio_seal_targets` apunta hoy al fichero de
+# apps/data/keycloak-postgres para el namespace data-prod: al retirar aquel chart
+# hay que actualizar ese destino alli.
+backupSecret:
+  enabled: false
+  name: cnpg-backup-s3-creds
+  encryptedData:
+    accessKeyId: ""
+    secretAccessKey: ""
+
+# Contrasenas de los roles de `cluster.cluster.roles`, una por role.
+# Ver templates/role-sealedsecret.yaml, que explica por que estos van por mapa y
+# no en un bloque propio como los dos de arriba.
+#
+# La clave del mapa es el NOMBRE DEL SECRET, y el mapa vacio es el gate. El
+# plaintext de `username` tiene que ser exactamente el nombre del role: CNPG lo
+# compara, y si no cuadra ignora la contrasena sin avisar.
+#
+#   roleSecrets:
+#     deal-tracker-prod-db:
+#       username: "<ciphertext de: deal_tracker_prod>"
+#       password: "<ciphertext de la contrasena>"
+roleSecrets: {}
