@@ -31,9 +31,14 @@ editUsernameAllowed: false
 
 # Servidor de correo (issue #60). LA CONTRASENA NO ESTA AQUI: es la API key de Resend y entra
 # por var-substitution desde el SealedSecret `keycloak-realm-smtp`, que config-cli recibe como
-# variable de entorno. Ese `$(env:...)` solo se resuelve con
+# variable de entorno. La referencia de abajo solo se resuelve con
 # `realmConfig.varSubstitution.enabled`; si la variable falta, el import de los DOS realms
 # aborta en vez de escribir la cadena literal como contrasena.
+#
+# NO ESCRIBAS UNA REFERENCIA DE EJEMPLO EN UN COMENTARIO DE ESTE FICHERO. La sustitucion se
+# hace sobre el TEXTO CRUDO antes de parsear el YAML, asi que los comentarios tambien entran:
+# un `env:...` de adorno en un comentario se intenta resolver como variable, no se resuelve, y
+# tira abajo el import de los dos realms. Paso al escribir este bloque.
 #
 # El remitente es el de QA a proposito, no el de produccion: este realm es el que autentica
 # QA, y su dominio verificado en Resend es otro. Tiene que coincidir con el

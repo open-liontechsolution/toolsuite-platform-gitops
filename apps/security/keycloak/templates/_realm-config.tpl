@@ -90,9 +90,12 @@ containers:
                 y con el los DOS realms del ConfigMap. Es el comportamiento que se quiere —mejor
                 que escribir `$(env:...)` como contrasena de correo—, pero implica que el Secret
                 tiene que existir antes que el Job.
-             2. A partir de aqui, cualquier `$(` que alguien escriba en `realms/` se interpreta.
-                Hoy no hay ninguno (ni `$(` ni `${`) en los dos ficheros; si algun dia hace falta
-                un `$(` literal, se escapa doblando el prefijo. */}}
+             2. A partir de aqui, cualquier `$(` que alguien escriba en `realms/` se interpreta
+                —INCLUIDO EL DE UN COMENTARIO—. La sustitucion se hace sobre el texto crudo del
+                fichero, antes de parsear el YAML, asi que un `$(` de adorno en un `#` no es
+                decorativo: se intenta resolver como variable y, al no existir, tira abajo el
+                import de los dos realms por el undefined-is-error de arriba. Paso al escribir
+                el bloque de SMTP. Si hace falta un `$(` literal, se escapa doblando el prefijo. */}}
       - name: IMPORT_VARSUBSTITUTION_ENABLED
         value: {{ .Values.realmConfig.varSubstitution.enabled | quote }}
       {{- /* Las claves del SMTP, una variable por realm. Los nombres salen de `encryptedData`
