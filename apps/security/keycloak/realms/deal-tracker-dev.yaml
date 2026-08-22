@@ -40,11 +40,18 @@ editUsernameAllowed: false
 # un `env:...` de adorno en un comentario se intenta resolver como variable, no se resuelve, y
 # tira abajo el import de los dos realms. Paso al escribir este bloque.
 #
-# El remitente es el de QA a proposito, no el de produccion: este realm es el que autentica
-# QA, y su dominio verificado en Resend es otro. Tiene que coincidir con el
-# `INVITE_FROM_EMAIL` del backend de ese entorno (deal-tracker#545), o el usuario recibe la
-# invitacion desde un sitio y la recuperacion desde otro, que es lo que cualquiera lee como
-# phishing.
+# EL REMITENTE ES COPIA LITERAL del `INVITE_FROM_EMAIL` del backend de QA, que hoy vale
+# `deal-tracker@qa.liontechsolution.com` (`deal-tracker/overlays/qa/patch-web-deployment.yaml`
+# en k3s-local-apps-manifests). Tiene que coincidir entero, buzon incluido: el usuario recibe
+# la invitacion de la aplicacion y la recuperacion de Keycloak, y que vengan de sitios
+# distintos es lo que cualquiera lee como phishing.
+#
+# OJO AL DOMINIO, que no es el que parece. El de QA es `qa.liontechsolution.com`, generico del
+# entorno — NO `dealtracker-qa.…`, que es el host de la SPA (ese es el `APP_PUBLIC_URL`, otra
+# variable). Produccion si usa `dealtracker.liontechsolution.com` en las dos cosas, asi que la
+# simetria enganna. Poner el host de la SPA aqui da un `550 This API key is not authorized to
+# send emails from ...`: la key es valida y el SMTP conecta, pero Resend no tiene ese dominio.
+# Comprobado asi el 22/08/2026. Si cambia el remitente del backend, cambia aqui.
 #
 # Y ojo con la NetworkPolicy: el 587 se abre en `networkPolicy.smtp` del chart. Sin esa regla
 # no sale un correo y el sintoma no señala ahi.
@@ -56,7 +63,7 @@ smtpServer:
   ssl: "false"
   user: resend
   password: $(env:SMTP_PASSWORD_DEAL_TRACKER_DEV)
-  from: no-reply@dealtracker-qa.liontechsolution.com
+  from: deal-tracker@qa.liontechsolution.com
   fromDisplayName: Deal Tracker QA
 
 # Con SMTP ya se puede: recuperar la contrasena sin pasar por un administrador, y comprobar

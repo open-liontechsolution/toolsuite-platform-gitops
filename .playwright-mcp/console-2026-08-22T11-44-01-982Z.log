@@ -1,0 +1,2 @@
+[    1108ms] [WARNING] An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing. @ https://keycloak-dev.liontechsolution.com/realms/deal-tracker-dev/protocol/openid-connect/3p-cookies/step1.html:0
+[    1189ms] [WARNING] An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing. @ https://keycloak-dev.liontechsolution.com/realms/deal-tracker-dev/protocol/openid-connect/3p-cookies/step2.html:0
