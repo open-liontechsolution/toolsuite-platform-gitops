@@ -32,14 +32,49 @@ keycloakx:
   ingress:
     enabled: false
 
-  # Dev resource limits
+  # EL LIMITE DE CPU ES DE ARRANQUE, NO DE REGIMEN. Keycloak re-augmenta la imagen de
+  # Quarkus en CADA arranque ("Changes detected in configuration. Updating the server
+  # image"): `KC_DB` llega por variable de entorno y es una opcion de BUILD, asi que el
+  # servidor se reconstruye antes de servir. Ese paso es CPU-bound.
+  #
+  # ESTO YA LE PASO A ESTA INSTANCIA, no es una inferencia traida de prod (#69). El
+  # 17/08/2026 el pod se recreo, el contenedor arranco a las 15:59:01 y kubelet lo mato
+  # a las 16:05:15 — 374s, justo por encima de los 15 + 60*5 = 315s que presupuestaba la
+  # startupProbe por defecto. El `exitCode 137` lleva `reason: Error`, no `OOMKilled`:
+  # fue la sonda, no la memoria. Arranco al SEGUNDO intento y por eso nadie se entero.
+  #
+  # Con el limite a 3 la instancia de produccion llego a consumir 2800m y arranco en
+  # 93s, con el nodo a un 38% de sus 4 nucleos: la CPU estaba libre, quien apretaba era
+  # el limite. En regimen consume 3m, asi que el limite alto solo se usa durante los
+  # primeros minutos y no reserva nada — las `requests` se quedan en 250m.
+  #
+  # Aqui viven el realm `deal-tracker-dev` (contra el que se autentica QA) y, hasta la
+  # #62, el de produccion. Hoy ya no: el radio de un reinicio fallido es dev y QA.
   resources:
     requests:
       cpu: "250m"
       memory: "512Mi"
     limits:
-      cpu: "1"
+      cpu: "3"
       memory: "2Gi"
+
+  # Y el presupuesto de la sonda, por el mismo motivo: 315s no llegan para una
+  # re-augmentacion en hardware de Raspberry Pi, como demostro el kill de los 374s.
+  # 15 + 120*5 = 615s (~10 min) si. No afecta al arranque normal: la sonda deja de
+  # contar en cuanto /health responde.
+  #
+  # Es copia literal del default del subchart salvo `failureThreshold`, y la misma que
+  # lleva environments/local/prod.yaml. Va como string porque el subchart lo pasa por
+  # `tpl`.
+  startupProbe: |
+    httpGet:
+      path: '{{ tpl .Values.http.relativePath $ | trimSuffix "/" }}/health'
+      port: '{{ .Values.http.internalPort }}'
+      scheme: '{{ .Values.http.internalScheme }}'
+    initialDelaySeconds: 15
+    timeoutSeconds: 1
+    failureThreshold: 120
+    periodSeconds: 5
 
   # Pod labels for dev environment
   podLabels:
