@@ -98,7 +98,8 @@ bruteForceProtected: true
 # produccion se creo con `kcadm.sh` a mano y no aparece en ningun repositorio. Ojo con el
 # `kcadm.sh create users` suelto que documentaba esta cabecera antes: crea el usuario SIN
 # contrasena y sin UPDATE_PASSWORD, o sea alguien que existe y no puede entrar.
-# La politica de alta —manual mientras no haya SMTP— esta razonada en docs/KEYCLOAK_USERS.md.
+# La politica de alta esta razonada en docs/KEYCLOAK_USERS.md. Sigue siendo manual con el SMTP
+# ya puesto: lo que impide declarar personas no era la falta de correo.
 #
 # El backend aprovisiona solo la fila en `app_user` a partir de `sub`, `email` y `name`, y lo
 # hace en el PRIMER LOGIN: un usuario recien creado no existe todavia para la aplicacion.
