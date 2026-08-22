@@ -339,7 +339,8 @@ kubectl logs -n kube-system -l name=sealed-secrets-controller
 echo -n "platform" | kubeseal --raw \
   --from-file=/dev/stdin \
   --namespace data-dev \
-  --name platform-postgres-app
+  --name platform-postgres-app \
+  --controller-name sealed-secrets --controller-namespace kube-system
 ```
 
 ### Cannot Decrypt Secret
@@ -352,7 +353,8 @@ echo -n "platform" | kubeseal --raw \
 
 ```bash
 # Get new certificate
-kubeseal --fetch-cert > pub-cert.pem
+kubeseal --fetch-cert \
+  --controller-name sealed-secrets --controller-namespace kube-system > pub-cert.pem
 
 # Re-encrypt secrets
 echo -n "platform" | kubeseal --raw \
@@ -375,7 +377,8 @@ echo -n "platform" | kubeseal --raw \
 echo -n "your-password" | kubeseal --raw \
   --from-file=/dev/stdin \
   --namespace data-dev \
-  --name platform-postgres-app
+  --name platform-postgres-app \
+  --controller-name sealed-secrets --controller-namespace kube-system
 ```
 
 ## Storage Issues

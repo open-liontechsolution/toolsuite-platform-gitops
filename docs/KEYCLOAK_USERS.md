@@ -99,7 +99,8 @@ Se saca del servidor una vez por realm, y por stdout para poder encadenarlo sin 
 
 ```bash
 ./scripts/keycloak-client-secret.sh deal-tracker-dev deal-tracker-api \
-  | kubeseal --raw --from-file=/dev/stdin --namespace deal-tracker-qa --name deal-tracker-config
+  | kubeseal --raw --from-file=/dev/stdin --namespace deal-tracker-qa --name deal-tracker-config \
+    --controller-name sealed-secrets --controller-namespace kube-system
 ```
 
 El ciphertext va a `deal-tracker/overlays/*` de `k3s-local-apps-manifests`, bajo

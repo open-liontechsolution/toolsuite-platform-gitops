@@ -39,6 +39,38 @@ Secrets are now managed through the Helm chart using a SealedSecret template. Th
    sudo install -m 755 kubeseal /usr/local/bin/kubeseal
    ```
 
+## Los dos flags de `--controller-*` no son opcionales aqui
+
+Todos los ejemplos de este documento llevan:
+
+```
+--controller-name sealed-secrets --controller-namespace kube-system
+```
+
+**No los quites.** `kubeseal` necesita la clave publica del controller y, para encontrarla, busca
+por defecto un Service llamado `sealed-secrets-controller` en `kube-system`. En este cluster el
+Service se llama **`sealed-secrets`** —lo instalo el chart de Bitnami con ese nombre de release—,
+asi que sin los flags el comando falla antes de cifrar nada:
+
+```
+error: cannot get sealed secret service: services "sealed-secrets-controller" not found
+```
+
+Es un fallo limpio y ruidoso, no silencioso: no produce un ciphertext malo, simplemente no
+produce ninguno. Pero cuesta un rato entenderlo si la documentacion enseña el comando sin ellos.
+
+La alternativa, si vas a sellar muchos valores seguidos, es traerte el certificado una vez y
+pasarlo con `--cert`, que no consulta al controller:
+
+```bash
+kubeseal --fetch-cert \
+  --controller-name sealed-secrets --controller-namespace kube-system > pub-cert.pem
+# a partir de aqui: kubeseal --raw --cert pub-cert.pem ...
+```
+
+`scripts/seal-authentik.sh` los tiene en dos variables (`SEALED_SECRETS_CONTROLLER_NAME` y
+`SEALED_SECRETS_CONTROLLER_NAMESPACE`) por si algun dia cambian.
+
 ## Encrypting Secrets
 
 ### Step 1: Encrypt Your Values
@@ -50,7 +82,8 @@ For each environment, you need to encrypt the username and password:
 echo -n "platform" | kubeseal --raw \
   --from-file=/dev/stdin \
   --namespace data-dev \
-  --name platform-postgres-app
+  --name platform-postgres-app \
+  --controller-name sealed-secrets --controller-namespace kube-system
 
 # Output: AgAxxxxxxxxxxxxxxxxxxxxx...
 
@@ -58,7 +91,8 @@ echo -n "platform" | kubeseal --raw \
 echo -n "your-strong-password" | kubeseal --raw \
   --from-file=/dev/stdin \
   --namespace data-dev \
-  --name platform-postgres-app
+  --name platform-postgres-app \
+  --controller-name sealed-secrets --controller-namespace kube-system
 
 # Output: AgByyyyyyyyyyyyyyyyyyyyyy...
 ```
@@ -104,8 +138,10 @@ kubectl apply -f argocd/clusters/local/cnpg-cluster-dev.yaml
 
 ```bash
 # Encrypt secrets
-USERNAME_ENC=$(echo -n "platform" | kubeseal --raw --from-file=/dev/stdin --namespace data-dev --name platform-postgres-app)
-PASSWORD_ENC=$(echo -n "dev-password-123" | kubeseal --raw --from-file=/dev/stdin --namespace data-dev --name platform-postgres-app)
+USERNAME_ENC=$(echo -n "platform" | kubeseal --raw --from-file=/dev/stdin --namespace data-dev --name platform-postgres-app \
+  --controller-name sealed-secrets --controller-namespace kube-system)
+PASSWORD_ENC=$(echo -n "dev-password-123" | kubeseal --raw --from-file=/dev/stdin --namespace data-dev --name platform-postgres-app \
+  --controller-name sealed-secrets --controller-namespace kube-system)
 
 # Update apps/data/cnpg/environments/local/dev.yaml
 # Then commit and push
@@ -115,8 +151,10 @@ PASSWORD_ENC=$(echo -n "dev-password-123" | kubeseal --raw --from-file=/dev/stdi
 
 ```bash
 # Encrypt secrets
-USERNAME_ENC=$(echo -n "platform" | kubeseal --raw --from-file=/dev/stdin --namespace data-qa --name platform-postgres-app)
-PASSWORD_ENC=$(echo -n "qa-password-456" | kubeseal --raw --from-file=/dev/stdin --namespace data-qa --name platform-postgres-app)
+USERNAME_ENC=$(echo -n "platform" | kubeseal --raw --from-file=/dev/stdin --namespace data-qa --name platform-postgres-app \
+  --controller-name sealed-secrets --controller-namespace kube-system)
+PASSWORD_ENC=$(echo -n "qa-password-456" | kubeseal --raw --from-file=/dev/stdin --namespace data-qa --name platform-postgres-app \
+  --controller-name sealed-secrets --controller-namespace kube-system)
 
 # Update clusters/local/qa/values.yaml
 # Then commit and push
@@ -126,8 +164,10 @@ PASSWORD_ENC=$(echo -n "qa-password-456" | kubeseal --raw --from-file=/dev/stdin
 
 ```bash
 # Encrypt secrets
-USERNAME_ENC=$(echo -n "platform" | kubeseal --raw --from-file=/dev/stdin --namespace data-prod --name platform-postgres-app)
-PASSWORD_ENC=$(echo -n "prod-password-789" | kubeseal --raw --from-file=/dev/stdin --namespace data-prod --name platform-postgres-app)
+USERNAME_ENC=$(echo -n "platform" | kubeseal --raw --from-file=/dev/stdin --namespace data-prod --name platform-postgres-app \
+  --controller-name sealed-secrets --controller-namespace kube-system)
+PASSWORD_ENC=$(echo -n "prod-password-789" | kubeseal --raw --from-file=/dev/stdin --namespace data-prod --name platform-postgres-app \
+  --controller-name sealed-secrets --controller-namespace kube-system)
 
 # Update clusters/local/prod/values.yaml
 # Then commit and push
@@ -168,7 +208,8 @@ To change a password:
    echo -n "new-password" | kubeseal --raw \
      --from-file=/dev/stdin \
      --namespace data-dev \
-     --name platform-postgres-app
+     --name platform-postgres-app \
+     --controller-name sealed-secrets --controller-namespace kube-system
    ```
 
 2. **Update values file** with new encrypted value
@@ -224,10 +265,12 @@ kubectl describe sealedsecret platform-postgres-app -n data-dev
 
 **Solution:** You encrypted with wrong namespace. Re-encrypt with correct namespace:
 ```bash
+# El --namespace tiene que ser EXACTAMENTE el del despliegue: forma parte del cifrado.
 echo -n "value" | kubeseal --raw \
   --from-file=/dev/stdin \
-  --namespace data-dev \  # ← Make sure this matches!
-  --name platform-postgres-app
+  --namespace data-dev \
+  --name platform-postgres-app \
+  --controller-name sealed-secrets --controller-namespace kube-system
 ```
 
 ### Cluster Can't Start - Secret Not Found
@@ -269,7 +312,8 @@ If you were using the old `secrets/` directories:
    echo -n "existing-password" | kubeseal --raw \
      --from-file=/dev/stdin \
      --namespace data-dev \
-     --name platform-postgres-app
+     --name platform-postgres-app \
+     --controller-name sealed-secrets --controller-namespace kube-system
    ```
 
 3. **Update values file** with encrypted value

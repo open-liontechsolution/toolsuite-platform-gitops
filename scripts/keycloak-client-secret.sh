@@ -16,7 +16,8 @@
 # EL SECRETO SALE POR STDOUT Y NADA MAS, para que se pueda encadenar sin tocar disco:
 #
 #   ./scripts/keycloak-client-secret.sh deal-tracker-dev deal-tracker-api \
-#     | kubeseal --raw --from-file=/dev/stdin --namespace deal-tracker-qa --name deal-tracker-config
+#     | kubeseal --raw --from-file=/dev/stdin --namespace deal-tracker-qa --name deal-tracker-config \
+#       --controller-name sealed-secrets --controller-namespace kube-system
 #
 # Ese ciphertext va a `deal-tracker/overlays/*` de k3s-local-apps-manifests, bajo
 # KEYCLOAK_ADMIN_CLIENT_SECRET. El sellado es por namespace: el mismo secreto para dos

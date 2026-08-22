@@ -3,6 +3,13 @@
 **Date:** 2026-02-05  
 **Status:** ✅ COMPLETED
 
+
+> **Documento historico, no una guia.** Es el registro de lo que se hizo aquel dia y se deja
+> tal cual. Los comandos de aqui **no** se pueden copiar hoy: a `kubeseal` le faltan
+> `--controller-name sealed-secrets --controller-namespace kube-system` (ver
+> `docs/SEALED-SECRETS-GUIDE.md`) y varios ejemplos usan los namespaces `data-qa` y
+> `data-prod`, que se borraron en la #44 porque nunca llegaron a funcionar.
+
 ## Objective
 
 Reorganize the repository to consolidate environment values and Argo CD manifests within the CNPG chart directory, eliminating relative path navigation (`../`) and enabling simple UI-based management in Argo CD.

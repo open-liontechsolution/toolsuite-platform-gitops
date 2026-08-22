@@ -133,7 +133,8 @@ Secrets are managed through Helm values files using Bitnami Sealed Secrets:
    echo -n "your-password" | kubeseal --raw \
      --from-file=/dev/stdin \
      --namespace data-dev \
-     --name platform-postgres-app
+     --name platform-postgres-app \
+     --controller-name sealed-secrets --controller-namespace kube-system
    ```
 
 2. **Add encrypted values** to environment's `values.yaml`:
@@ -179,13 +180,15 @@ Secrets are now managed through Helm values files. Encrypt your secrets and add 
 echo -n "platform" | kubeseal --raw \
   --from-file=/dev/stdin \
   --namespace data-dev \
-  --name platform-postgres-app
+  --name platform-postgres-app \
+  --controller-name sealed-secrets --controller-namespace kube-system
 
 # Encrypt password
 echo -n "your-strong-password" | kubeseal --raw \
   --from-file=/dev/stdin \
   --namespace data-dev \
-  --name platform-postgres-app
+  --name platform-postgres-app \
+  --controller-name sealed-secrets --controller-namespace kube-system
 
 # Update apps/data/cnpg/environments/local/dev.yaml with the encrypted values:
 # sealedSecret:

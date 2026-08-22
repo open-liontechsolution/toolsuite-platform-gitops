@@ -482,7 +482,8 @@ reconciliacion nocturna no lo rota. Se saca una vez y se sella en el repo de man
 
 ```bash
 ./scripts/keycloak-client-secret.sh deal-tracker-dev deal-tracker-api \
-  | kubeseal --raw --from-file=/dev/stdin --namespace deal-tracker-qa --name deal-tracker-config
+  | kubeseal --raw --from-file=/dev/stdin --namespace deal-tracker-qa --name deal-tracker-config \
+    --controller-name sealed-secrets --controller-namespace kube-system
 ```
 
 ### Alta de usuarios

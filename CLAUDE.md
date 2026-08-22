@@ -66,7 +66,8 @@ deployment target exactly):
 
 ```bash
 echo -n "your-value" | kubeseal --raw --from-file=/dev/stdin \
-  --namespace data-dev --name platform-postgres-app
+  --namespace data-dev --name platform-postgres-app \
+  --controller-name sealed-secrets --controller-namespace kube-system
 ```
 
 Then paste the output under `sealedSecret.encryptedData.<field>` in that environment's values file.

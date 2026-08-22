@@ -121,13 +121,15 @@ For each environment, encrypt the database credentials.
 echo -n "platform" | kubeseal --raw \
   --from-file=/dev/stdin \
   --namespace data-dev \
-  --name platform-postgres-app
+  --name platform-postgres-app \
+  --controller-name sealed-secrets --controller-namespace kube-system
 
 # Encrypt password
 echo -n "your-strong-password" | kubeseal --raw \
   --from-file=/dev/stdin \
   --namespace data-dev \
-  --name platform-postgres-app
+  --name platform-postgres-app \
+  --controller-name sealed-secrets --controller-namespace kube-system
 ```
 
 **IMPORTANT:**
@@ -339,7 +341,8 @@ kubectl run -it --rm psql \
 echo -n "platform" | kubeseal --raw \
   --from-file=/dev/stdin \
   --namespace data-dev \
-  --name platform-postgres-app
+  --name platform-postgres-app \
+  --controller-name sealed-secrets --controller-namespace kube-system
 
 # Deploy
 kubectl apply -f apps/data/cnpg/argocd/clusters/local/dev.yaml
@@ -361,7 +364,8 @@ kubectl get cluster -n data-dev
 echo -n "platform" | kubeseal --raw \
   --from-file=/dev/stdin \
   --namespace data-qa \
-  --name platform-postgres-app
+  --name platform-postgres-app \
+  --controller-name sealed-secrets --controller-namespace kube-system
 
 # Deploy
 kubectl apply -f apps/data/cnpg/argocd/clusters/local/qa.yaml
@@ -383,7 +387,8 @@ kubectl get cluster -n data-qa
 echo -n "platform" | kubeseal --raw \
   --from-file=/dev/stdin \
   --namespace data-prod \
-  --name platform-postgres-app
+  --name platform-postgres-app \
+  --controller-name sealed-secrets --controller-namespace kube-system
 
 # Deploy (manual sync required)
 kubectl apply -f apps/data/cnpg/argocd/clusters/local/prod.yaml
@@ -438,7 +443,8 @@ argocd app sync cnpg-cluster-local-dev
 echo -n "new-password" | kubeseal --raw \
   --from-file=/dev/stdin \
   --namespace data-dev \
-  --name platform-postgres-app
+  --name platform-postgres-app \
+  --controller-name sealed-secrets --controller-namespace kube-system
 
 # Update values file
 vim apps/data/cnpg/environments/local/dev.yaml
