@@ -77,8 +77,19 @@ solo.
 El client es confidencial, pero su secreto **no se declara en el fichero de realm**. Lo genera
 Keycloak al crearlo, y config-cli no lo toca nunca: con `secret` ausente, su
 `ClientImportService.isClientEqual` devuelve `true` **sin llegar a consultar el secreto real**, asi
-que la reconciliacion de las 04:00 no lo rota. Medido: tras forzar una pasada del CronJob, el
-secreto es el mismo.
+que la reconciliacion de las 04:00 no lo rota.
+
+**Medido el 22/08/2026**, que es lo que sostiene todo lo anterior: tras el Job de PostSync y una
+pasada forzada del CronJob, el secreto de `deal-tracker-dev` era el mismo antes y despues. En la
+misma comprobacion, el token de `client_credentials` llevaba
+`resource_access.realm-management.roles = [manage-users]` y la Admin API respondia **200** al listar
+y al buscar por `username` (o sea, `manage-users` cubre la lectura sin `view-users`), **403** contra
+el otro realm, y las personas de los dos realms seguian exactamente igual —incluido el
+`UPDATE_PASSWORD` pendiente de una de produccion, que no se toco.
+
+Un detalle de la misma medicion: en vivo el client tiene un cuarto scope, `service_account`, que
+**Keycloak anade solo** al encender `serviceAccountsEnabled`. No se declara en el fichero porque es
+suyo, y config-cli no se lo quita en la reconciliacion.
 
 Se saca del servidor una vez por realm, y por stdout para poder encadenarlo sin que toque disco:
 
