@@ -78,8 +78,38 @@ containers:
         value: {{ .Values.realmConfig.availabilityCheckTimeout | quote }}
       - name: IMPORT_FILES_LOCATIONS
         value: "/config/*.yaml"
+      {{- /* Lo que permite que un fichero de realm referencie un secreto sin llevarlo dentro:
+             `$(env:VARIABLE)`. El prefijo es `$(`, NO `${`, para no chocar con las variables
+             propias de Keycloak —los `${role_uma_authorization}` y los message bundles—, que
+             quedan intactas. Encendido para la contrasena del SMTP (issue #60).
+
+             DOS COSAS QUE MUERDEN AL ENCENDERLO:
+
+             1. `import.var-substitution.undefined-is-error` viene true de fabrica, asi que una
+                variable que falte NO deja una cadena rara en un realm: aborta el import ENTERO,
+                y con el los DOS realms del ConfigMap. Es el comportamiento que se quiere —mejor
+                que escribir `$(env:...)` como contrasena de correo—, pero implica que el Secret
+                tiene que existir antes que el Job.
+             2. A partir de aqui, cualquier `$(` que alguien escriba en `realms/` se interpreta.
+                Hoy no hay ninguno (ni `$(` ni `${`) en los dos ficheros; si algun dia hace falta
+                un `$(` literal, se escapa doblando el prefijo. */}}
       - name: IMPORT_VARSUBSTITUTION_ENABLED
-        value: "false"
+        value: {{ .Values.realmConfig.varSubstitution.enabled | quote }}
+      {{- /* Las claves del SMTP, una variable por realm. Los nombres salen de `encryptedData`
+             para que no haya dos listas que mantener: la clave del Secret, la variable de
+             entorno y el `$(env:...)` del fichero de realm son el mismo nombre.
+             SIN `optional`: si el Secret no esta, el pod se queda en CreateContainerConfigError
+             y se ve; con `optional` arrancaria para morir despues por el undefined-is-error de
+             arriba, que dice menos sobre lo que pasa. */}}
+      {{- if .Values.realmConfig.smtpSecret.enabled }}
+      {{- range $key, $_ := .Values.realmConfig.smtpSecret.encryptedData }}
+      - name: {{ $key }}
+        valueFrom:
+          secretKeyRef:
+            name: {{ $.Values.realmConfig.smtpSecret.name | quote }}
+            key: {{ $key | quote }}
+      {{- end }}
+      {{- end }}
       - name: JAVA_OPTS
         value: "-XX:MaxRAMPercentage=75"
     volumeMounts:

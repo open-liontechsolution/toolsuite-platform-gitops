@@ -39,4 +39,28 @@ spec:
           port: 443
         - protocol: TCP
           port: 80
+    {{- if .Values.networkPolicy.smtp.enabled }}
+    {{- /*
+      SIN ESTA REGLA NO SALE UN SOLO CORREO, y el sintoma no señala aqui: Keycloak se
+      queda esperando un socket que nunca abre y el usuario ve "no me llega el correo",
+      no "la policy lo corta".
+
+      Y no vale con anadir el 587 a la regla de arriba: esa lleva `namespaceSelector`,
+      que SOLO casa pods del cluster. Para salir a smtp.resend.com hace falta un
+      `ipBlock`, y hoy no hay ninguno en toda la policy — o sea que ni el 443 de ahi
+      arriba llega de verdad a internet. Este es el unico camino de salida real.
+
+      Acotado al puerto del SMTP y con los rangos privados en `except`, para que abrir
+      la salida a internet no sea ademas abrir la salida al resto del cluster ni a la
+      red de casa.
+    */}}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              {{- toYaml .Values.networkPolicy.smtp.except | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.smtp.port }}
+    {{- end }}
 {{- end }}

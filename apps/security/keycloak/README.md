@@ -495,10 +495,35 @@ procedimiento: `scripts/keycloak-user.sh`, con `crear`, `listar`, `reset`, `baja
 ```
 
 Reparte una contrasena **temporal** y fuerza `UPDATE_PASSWORD` en el primer login. Que el alta sea
-manual no es un pendiente: sin SMTP en el realm no hay verificacion de correo ni recuperacion de
-contrasena, y el auto-registro sobre esa base dejaria fuera para siempre al primero que olvidase la
-suya. La politica, el disparador para revisarla y las trampas del script estan en
+manual no es un pendiente: es que las personas no pueden declararse en git —config-cli no sabe
+borrarlas y el CronJob de las 04:00 desharia cada baja—, y eso no cambia con nada de lo de abajo.
+La politica y las trampas del script estan en
 [`docs/KEYCLOAK_USERS.md`](../../../docs/KEYCLOAK_USERS.md).
+
+### Correo saliente y politica de contrasena
+
+Los dos realms de deal-tracker tienen `smtpServer` contra **Resend** (issue #60), y con el
+`resetPasswordAllowed`, `verifyEmail` y una `passwordPolicy`. Tres cosas que conviene saber antes
+de tocarlo:
+
+1. **La contrasena del SMTP no esta en `realms/`.** Entra por var-substitution:
+   `password: $(env:SMTP_PASSWORD_DEAL_TRACKER_DEV)`, y la variable viene del SealedSecret
+   `keycloak-realm-smtp`. Lo enciende `realmConfig.varSubstitution.enabled`; el prefijo es `$(`,
+   no `${`, para no chocar con las variables propias de Keycloak.
+   **Una variable que falte aborta el import de los DOS realms**, no solo del suyo
+   (`import.var-substitution.undefined-is-error` viene `true` de fabrica). Es el comportamiento
+   que se quiere: mejor eso que un realm con `$(env:...)` de contrasena.
+2. **Una clave por realm, no una.** Cada uno manda desde su propio dominio verificado
+   (`dealtracker-qa.…` y `dealtracker.…`): la de QA no puede servir para mandar como produccion.
+3. **El 587 lo abre la NetworkPolicy, y es la unica regla que sale de verdad a internet.** Las
+   demas van por `namespaceSelector`, que solo casa pods del cluster; esta lleva `ipBlock`. Sin
+   ella Keycloak no manda un correo y el sintoma se lee como «no llega», no como «lo corta la
+   policy». Se gobierna en `networkPolicy.smtp`.
+
+La `passwordPolicy` es `length(12) and notUsername and notEmail and passwordHistory(3)`: longitud
+sin reglas de composicion, siguiendo NIST 800-63B. **Es el unico sitio donde esa politica puede
+vivir**, porque el alta por invitacion fija la contrasena por la Admin API y no por un formulario
+de Keycloak.
 
 ## Monitoring and Metrics
 

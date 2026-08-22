@@ -128,9 +128,31 @@ sealedSecret:
 networkPolicy:
   enabled: true
   databaseNamespace: "data-dev"
+  # Salida a smtp.resend.com:587 (issue #60). Ver el values base.
+  smtp:
+    enabled: true
 
 # Realms declarados en git (issue #49). El resto de la configuracion esta en el
 # values.yaml base; aqui solo se enciende y se apunta al Service de esta release.
 realmConfig:
   enabled: true
   keycloakUrl: "http://keycloak-dev-http"
+
+  # La contrasena del SMTP entra por `$(env:...)` desde el SealedSecret de abajo (issue #60).
+  varSubstitution:
+    enabled: true
+
+  # Una clave por realm: los dos mandan desde dominios verificados distintos en Resend
+  # (`dealtracker-qa.…` y `dealtracker.…`), asi que la de QA no puede servir para mandar como
+  # produccion. El nombre de cada clave es tambien la variable de entorno y lo que aparece en
+  # `$(env:...)` en el fichero de realm correspondiente.
+  #
+  # Sellados contra el namespace `security-dev` y el nombre `keycloak-realm-smtp`:
+  #   echo -n "<api key>" | kubeseal --raw --from-file=/dev/stdin \
+  #     --namespace security-dev --name keycloak-realm-smtp
+  smtpSecret:
+    enabled: true
+    name: keycloak-realm-smtp
+    encryptedData:
+      SMTP_PASSWORD_DEAL_TRACKER_DEV: ""
+      SMTP_PASSWORD_DEAL_TRACKER_PROD: ""
