@@ -1,0 +1,116 @@
+# Cluster CNPG dedicado al Keycloak de PRODUCCION (issue #62).
+#
+# POR QUE UN CLUSTER PROPIO Y NO UNA BASE MAS EN platform-postgres-dev: la mitad del
+# problema que cierra la #62 es que produccion depende hoy de infraestructura de dev.
+# Mover el IdP a su propia instancia y dejarle la base en el cluster de datos de dev
+# habria movido el pod y no la dependencia. Mismo criterio —y misma forma— que
+# apps/data/authentik-postgres, que es el precedente exacto: un CNPG dedicado a un
+# solo IdP.
+cluster:
+  mode: standalone
+  type: postgresql
+
+  nameOverride: ""
+  fullnameOverride: ""
+
+  cluster:
+    instances: 3
+    imageName: ghcr.io/cloudnative-pg/postgresql:16.4
+
+    storage:
+      size: 10Gi
+      storageClass: ""
+
+    walStorage:
+      enabled: true
+      size: 1Gi
+      storageClass: ""
+
+    resources:
+      requests:
+        cpu: "1000m"
+        memory: "2Gi"
+      limits:
+        cpu: "4000m"
+        memory: "8Gi"
+
+    primaryUpdateStrategy: unsupervised
+
+    affinity:
+      topologyKey: kubernetes.io/hostname
+
+    # Monitoring: el objeto PodMonitor NO es nuestro. Lo declara
+    # k3s-local-apps-manifests (`prometheus/cnpg/podmonitor.yaml`, ns `monitoring`).
+    # Encenderlo aqui crearia un segundo PodMonitor y duplicaria el scrape.
+    # `prometheusRule` tampoco sirve: las reglas del chart no llevan la etiqueta
+    # `prometheus: prometheus-persistant` y el ruleSelector las ignoraria en silencio.
+    # Explicacion larga en apps/data/cnpg/values.yaml.
+    #
+    # OJO: ese PodMonitor lleva hoy un `namespaceSelector` sobre `data-dev` y
+    # `data-casa`, asi que ESTE CLUSTER NO SE SCRAPEA hasta que se anada `data-prod`
+    # alli. Es un cambio de aquel repo, no de este.
+    monitoring:
+      enabled: false
+      podMonitor:
+        enabled: false
+      prometheusRule:
+        enabled: false
+
+    initdb:
+      database: keycloak_prod
+      owner: keycloak_prod
+      secret:
+        name: keycloak-postgres-app
+
+  # Backup logico del operator (barmanObjectStore -> MinIO). Aqui viven los usuarios
+  # del IdP de produccion: sin esto, un `DROP TABLE` o una corrupcion se los lleva.
+  # Las replicas de Longhorn cubren la perdida de disco, no un borrado.
+  # Mismo bucket y misma credencial que apps/data/cnpg, sellada aparte porque el
+  # SealedSecret va atado al namespace. Detalle de cada campo alli.
+  backups:
+    enabled: false
+    provider: s3
+    endpointURL: "http://192.168.50.240:9000"
+    destinationPath: "s3://cnpg-backup"
+    secret:
+      create: false
+      name: cnpg-backup-s3-creds
+    wal:
+      compression: gzip
+      encryption: ""
+      maxParallel: 1
+    data:
+      compression: gzip
+      encryption: ""
+      jobs: 2
+    retentionPolicy: "30d"
+    scheduledBackups:
+      - name: daily-backup
+        # 02:00 UTC, escalonado respecto a platform-postgres (01:30) y a
+        # authentik-postgres (01:45): los tres suben al mismo MinIO por la misma LAN.
+        schedule: "0 0 2 * * *"
+        backupOwnerReference: self
+        method: barmanObjectStore
+
+# Credenciales de la base de Keycloak (username/password del role `keycloak_prod`).
+# EL MISMO PLAINTEXT del `password` va sellado una segunda vez, contra el namespace
+# `security-prod`, en apps/security/keycloak/environments/local/prod.yaml bajo
+# `KC_DB_PASSWORD`. Son dos ciphertexts distintos del mismo secreto: el sellado va
+# atado a namespace + nombre. Si se rota, se rotan LOS DOS en el mismo commit.
+sealedSecret:
+  enabled: false  # Se enciende en el values del entorno
+  name: keycloak-postgres-app
+  encryptedData:
+    # echo -n "keycloak_prod" | kubeseal --raw --from-file=/dev/stdin --namespace data-prod --name keycloak-postgres-app --controller-name sealed-secrets --controller-namespace kube-system
+    username: ""
+    password: ""
+
+# Credencial S3 del barmanObjectStore (usuario `cnpg-backup` del MinIO). Mismo
+# plaintext que en apps/data/cnpg y apps/data/authentik-postgres, sellado para el
+# namespace data-prod. Ver templates/backup-s3-sealedsecret.yaml.
+backupSecret:
+  enabled: false
+  name: cnpg-backup-s3-creds
+  encryptedData:
+    accessKeyId: ""
+    secretAccessKey: ""

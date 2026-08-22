@@ -1,0 +1,130 @@
+# Keycloak PostgreSQL - entorno de PRODUCCION (issue #62)
+# Namespace: data-prod
+# Deployment: k3s local con almacenamiento Longhorn
+# Cluster CNPG separado de platform-postgres: aqui solo vive el IdP de produccion.
+
+cluster:
+  fullnameOverride: keycloak-postgres-prod
+
+  cluster:
+    imageName: ghcr.io/cloudnative-pg/postgresql:16.4
+
+    # Una sola instancia, a proposito.
+    # Subir a 2 dejaria el segundo pod en Pending: la nodeAffinity de mas abajo exige
+    # worker AND performance=high y `worker4` es el unico worker con esa etiqueta. Ver
+    # la nota larga en apps/data/cnpg/environments/local/dev.yaml.
+    # La recuperacion de este cluster es por backup, no por failover.
+    instances: 1
+
+    # `keycloak_dev` ocupa 15MB tras un ano; 10Gi es holgado de sobra para el esquema
+    # de un Keycloak, que no crece con los datos de la aplicacion.
+    storage:
+      size: 10Gi
+      storageClass: longhorn
+    walStorage:
+      storageClass: longhorn
+      size: 1Gi
+
+    # Un Keycloak con dos usuarios no necesita mas que esto. El limite deja margen
+    # para el import inicial del realm, que es el pico.
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+      limits:
+        cpu: "1"
+        memory: "2Gi"
+
+    # Node affinity: solo workers de alto rendimiento.
+    # Las dos expresiones van ANDed, asi que la instancia cae en un nodo que es worker
+    # AND performance=high (el control-plane master1 tambien lleva performance=high,
+    # por eso la etiqueta de worker es obligatoria para excluirlo).
+    affinity:
+      enablePodAntiAffinity: true
+      topologyKey: kubernetes.io/hostname
+      podAntiAffinityType: preferred
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: node-role.kubernetes.io/worker
+                  operator: In
+                  values:
+                    - "true"
+                - key: node.kubernetes.io/performance
+                  operator: In
+                  values:
+                    - high
+
+    additionalLabels:
+      app.kubernetes.io/part-of: data-platform
+      app.kubernetes.io/component: keycloak-db
+      environment: prod
+      deployment: local
+
+    bootstrap:
+      initdb:
+        database: keycloak_prod
+        owner: keycloak_prod
+        secret:
+          name: keycloak-postgres-app
+
+    primaryUpdateStrategy: unsupervised
+
+    # Tuning para una instancia pequena: el unico inquilino es Keycloak.
+    postgresql:
+      parameters:
+        max_connections: "100"
+        shared_buffers: "128MB"
+        effective_cache_size: "512MB"
+        maintenance_work_mem: "32MB"
+        work_mem: "1310kB"
+        checkpoint_completion_target: "0.9"
+        wal_buffers: "16MB"
+        default_statistics_target: "100"
+        random_page_cost: "1.1"
+        effective_io_concurrency: "200"
+        min_wal_size: "128MB"
+        max_wal_size: "512MB"
+
+  # Backup logico a MinIO. Forma completa en el values.yaml base.
+  #
+  # APAGADO HASTA QUE ESTE EL CIPHERTEXT. Va atado a `backupSecret` de mas abajo: los
+  # dos flags se encienden a la vez y en el MISMO COMMIT que los ciphertexts. Con
+  # `backups.enabled` y sin Secret, el archivado de WAL falla y el cluster arranca
+  # igual — el fallo no se ve hasta que hace falta el backup.
+  backups:
+    enabled: false
+
+# Credenciales del role `keycloak_prod`. El mismo plaintext del password esta sellado
+# tambien contra `security-prod` en apps/security/keycloak/environments/local/prod.yaml
+# (KC_DB_PASSWORD): dos ciphertexts distintos del mismo secreto, porque el sellado va
+# atado a namespace + nombre. Si se rota, se rotan los dos en el mismo commit.
+sealedSecret:
+  enabled: true
+  name: keycloak-postgres-app
+  encryptedData:
+    username: "AgAgFhSYROWabwHjntQgaExQReei0ZzPZr8FFBiV9ZKru2mwIQyknYDOyMP5cTmSvtZfiLpjKBa1jZ+fS89bzI9/PBCfbL1YSKqTx+lOuIRNuuF7WYoCzJSnYBmUxu9ddyfWukDF9nSlSltScuz01tmdCm26xpB2FrRk0KortSVZqSBKBlre4ZfZriOQmaa5601Ekip3V3GSAOCaGRib3UAz14tILz8MaXajWyjAPNLjGbAiYzbQg0di8+DjGA9FMn3iRldlKbtlgnL9fMe35tJxh0rKFL074G7UwpMPkV30HpXabi/exn5xQ6z8CWbvrBlxmYKmTCGeVeQXdnx501I0WJJOqslvxgZpGk2/R2FnUkHCkOctXBAVauUcZnk91+N/62TXtuHg/yLr0WhRevRi73wuKOZVN2MAGYdPNyohLcQ5gFtTKtOYwa889OOfIV/ykwhj1ehZFbPkYp2CzU0aUiBpNdm0q+d6wOHLaCAhnnzPlAJiNzFZo1/PGKUzBMJjNTmghXwpfbtSow5I6qSHpfsM1mwVhkGZIiJxmJCLToHaPxIlj8NfOiTHAEX3nCy2U4Uc+85gFHcYzayyVCrNAoYtc0J9XZb1xFqYAEaNx+nzKxbVqCdl5MvEohHbHvfm4GkRNIjNZQN0lo7k7YMYB/vj6EoVNhwto9C+YBjzhfYs6WdHvvVNF1tPlcBTQQvRSQwm7ai3OOw1qQSm"
+    password: "AgBh4ywPH6kNhOndVU8hatW/Bpxm0J8kfbmHp7acfI8IJRAP0Q1AT70mDtTUJnPcyee6kiMH5S5/WzMIfSXnjmcd/481/RvWVfre86WfQR6mqCjvWKMo+h2szkLlvyWCt3/bnfJ0rQn3qGQ/f25QHgeLFbRIYov0lHY1B451JYcKnz3QwIu/HcyQHYb/LhnZ4eq2lcN2LLHhzIfKTfnHz4k/dy0ggu7OaeS9SnOTbnj+smGpemtrWbROe3orVC0hPQcZqJ9gpU6SuVH9vyMaDpl5DInKJWmBpZxhz2M6wyH8+/JbOmStcEmFagOWnndGZxB6+FPcnDBNj9WtLGSi8hHo3yxJdQieC4Fib7h6oPf7e5HtzQnf/Bn1J26xSCs84leJ0CmJzHG18z5T9IWr0/VoSQlneYvesnRo+G19p/rWGQvQ7FzXG0hXdLuoRgUYAimTGKTnelRvEDpuwoebgMPt3w70GJtKl9synG0Cw+FLqpgdNvGeiYLY13UyvNoY7Tgfb+LWfJ1vu6r5n9sR5wPlYDCNZnax+SKQPyFDlzWfKPNSHTCSaLnXyikNsya7QljZiUNWtWPvfLpDQLg994NhMDn+Fg8RbROOx4oD3hn9nK2IKz0JfFwyLPJxmBkTBe2/s8hv1EwfLSh3YxYwrfL87DYK/wpNf9P7oPNU3x/MlQPbOsS0feQiysIRH2XIn91gevKvQWQRyPfW793NbegVDzHAhlNCy4OQohhccMDA5Q=="
+
+# Credencial S3 del backup a MinIO: usuario `cnpg-backup`, compartido con
+# platform-postgres-dev y authentik-postgres-casa. Los tres clusters escriben en el
+# mismo bucket sin pisarse porque CNPG cuelga cada uno de su propio serverName
+# (s3://cnpg-backup/keycloak-postgres-prod/...).
+#
+# PENDIENTE: es el MISMO plaintext que en los otros dos values, pero el ciphertext es
+# distinto y NO son intercambiables — este tiene que ir sellado contra `data-prod`.
+#
+# NO SE SELLA A MANO DESDE EL SECRET VIVO: el bucket, la policy, el usuario y el
+# plaintext los gobierna juanjocop/kxs-ansible (`roles/minio_creds`,
+# `playbooks/minio_creds.yml`, vault cifrado). Anadir `data-prod` a
+# `minio_seal_targets` de ese rol y ejecutar el playbook deja los dos ciphertexts en
+# su `out/cnpg-backup-s3-creds.yaml` para pegarlos aqui. Crear credenciales de MinIO
+# por fuera de ese camino es exactamente como `longhorn-backup` costo 49 dias de
+# backup roto en silencio.
+backupSecret:
+  enabled: false
+  name: cnpg-backup-s3-creds
+  encryptedData:
+    accessKeyId: ""
+    secretAccessKey: ""

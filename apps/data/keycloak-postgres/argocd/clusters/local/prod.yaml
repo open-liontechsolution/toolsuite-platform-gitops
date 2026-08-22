@@ -1,0 +1,54 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: keycloak-postgres-local-prod
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: tools
+
+  source:
+    repoURL: https://github.com/open-liontechsolution/toolsuite-platform-gitops
+    path: apps/data/keycloak-postgres
+    targetRevision: main
+    helm:
+      releaseName: keycloak-postgres-prod
+      valueFiles:
+        - values.yaml
+        - environments/local/prod.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: data-prod
+
+  syncPolicy:
+    # SIN `automated`, a proposito. No es un olvido, y es distinto de
+    # `authentik-postgres-local-casa`, que si lo tiene.
+    #
+    # Esta base sostiene el LOGIN DE PRODUCCION de deal-tracker. Un auto-sync con
+    # prune+selfHeal lleva cualquier error del repo directo a la base del IdP sin que
+    # nadie lo mire, y con `instances: 1` un rollout no deseado es una caida del login,
+    # no una degradacion. Es el mismo criterio que `cnpg-cluster-local-dev`.
+    #
+    # El sync se lanza a mano tras revisar el diff:
+    #   argocd app sync keycloak-postgres-local-prod
+    # o, sin la CLI:
+    #   kubectl -n argocd patch app keycloak-postgres-local-prod --type merge \
+    #     -p '{"operation":{"sync":{}}}'
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # Health assessment for CNPG Cluster
+  ignoreDifferences:
+    - group: postgresql.cnpg.io
+      kind: Cluster
+      jsonPointers:
+        - /status
