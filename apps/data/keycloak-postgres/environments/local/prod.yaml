@@ -62,12 +62,33 @@ cluster:
       environment: prod
       deployment: local
 
-    bootstrap:
-      initdb:
-        database: keycloak_prod
-        owner: keycloak_prod
-        secret:
-          name: keycloak-postgres-app
+    # OJO CON LA RUTA: es `cluster.cluster.initdb`, NO `cluster.cluster.bootstrap.initdb`.
+    # El subchart arma el bloque `bootstrap:` el solo a partir de `initdb`, asi que un
+    # `bootstrap:` escrito a mano aqui NO SE LEE — Helm lo acepta, el render sale con los
+    # valores de otro sitio y no avisa nadie. Comprobado: forzando
+    # `cluster.cluster.bootstrap.initdb.database=ZZZ` el Cluster renderiza igual, y
+    # forzando `cluster.cluster.initdb.database=ZZZ` cambia.
+    # (apps/data/authentik-postgres/environments/local/casa.yaml lleva ese bloque muerto.)
+    initdb:
+      database: keycloak_prod
+      owner: keycloak_prod
+      secret:
+        name: keycloak-postgres-app
+
+      # SIN ESTO KEYCLOAK NO ARRANCA. Su ConfigMap fija `KC_DB_SCHEMA: keycloak`, y
+      # Keycloak espera encontrar ese schema: no lo crea. Liquibase muere con
+      # `ERROR: schema "keycloak" does not exist` al intentar crear `databasechangelog`,
+      # y el pod entra en bucle de reinicio.
+      #
+      # En `keycloak_dev` ese schema lo creo alguien A MANO en su dia —es de los objetos
+      # que no viven en ningun repo, el mismo agujero de la #56—. Aqui se declara, asi que
+      # reconstruir esta base desde cero reproduce una que arranca.
+      #
+      # postInitApplicationSQL corre UNA VEZ, en el bootstrap y contra la base de la
+      # aplicacion. Anadirlo a un cluster ya arrancado no lo ejecuta: si hiciera falta
+      # cambiarlo, hay que recrear el cluster.
+      postInitApplicationSQL:
+        - CREATE SCHEMA IF NOT EXISTS keycloak AUTHORIZATION keycloak_prod
 
     primaryUpdateStrategy: unsupervised
 
