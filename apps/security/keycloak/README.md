@@ -452,10 +452,13 @@ aqui, un `webOrigins` roto se arregla en un PR, no en el pod.
 
 ### Que se toca y que no
 
-- **Los usuarios no se tocan nunca.** keycloak-config-cli no sabe borrarlos: `UserImportService`
+- **Las personas no se tocan nunca.** keycloak-config-cli no sabe borrarlas: `UserImportService`
   registra `"Purging users isn't supported in keycloak-config-cli!"` incluso si se le pasa
-  `users: []`. Y los ficheros de `realms/` no declaran usuarios, asi que el importador ni entra.
-  El auto-registro de usuarios es seguro frente al CronJob.
+  `users: []`. El auto-registro de usuarios es seguro frente al CronJob.
+  La **unica** entrada `users:` de `realms/` es el service account de `deal-tracker-api` (issue
+  #61) — no es una persona, no tiene contrasena y se retira borrando su client, y config-cli no
+  sabe asignarle su rol de ninguna otra forma. Ahi solo van service accounts; el razonamiento
+  entero esta en [`docs/KEYCLOAK_USERS.md`](../../../docs/KEYCLOAK_USERS.md).
 - **Lo no declarado se queda como esta**, con `import.managed.*=no-delete` (ver `values.yaml`).
   Comprobado sobre un realm de prueba: un ajuste de realm que el fichero no menciona sobrevive a la
   reconciliacion.
@@ -471,12 +474,20 @@ aqui, un `webOrigins` roto se arregla en un PR, no en el pod.
    compara la cabecera `Origin`, que nunca lleva ruta, y con `/*` no casa nunca.
 3. PR, merge, y `argocd app sync keycloak-local-dev`.
 
-Los secretos no van aqui en claro: el chart ya usa sealed-secrets, y los clients declarados son
-publicos (PKCE), sin secreto que guardar.
+Los secretos no van aqui en claro. Los clients de navegador (`deal-tracker-web`) son publicos con
+PKCE y no tienen secreto que guardar. El confidencial, `deal-tracker-api`, **si tiene uno y tampoco
+se declara**: lo genera Keycloak al crear el client y config-cli no lo toca nunca —con `secret`
+ausente, su `ClientImportService.isClientEqual` devuelve `true` sin llegar a consultarlo, asi que la
+reconciliacion nocturna no lo rota. Se saca una vez y se sella en el repo de manifiestos:
+
+```bash
+./scripts/keycloak-client-secret.sh deal-tracker-dev deal-tracker-api \
+  | kubeseal --raw --from-file=/dev/stdin --namespace deal-tracker-qa --name deal-tracker-config
+```
 
 ### Alta de usuarios
 
-Los usuarios **no** se declaran en `realms/` —ver arriba por que— asi que el alta es su propio
+Las personas **no** se declaran en `realms/` —ver arriba por que— asi que el alta es su propio
 procedimiento: `scripts/keycloak-user.sh`, con `crear`, `listar`, `reset`, `baja` y `alta`.
 
 ```bash
