@@ -455,6 +455,46 @@ Then apply changes and wait for resize.
 
 ## Networking Issues
 
+### Un host publicado por Cloudflare no responde DESDE CASA, y desde fuera si
+
+**Sintoma:** `curl https://<lo-que-sea>.liontechsolution.com` se cuelga hasta el timeout. No da
+404, ni 502, ni 1033: **no llega a completar el TCP**, ni en el 443 ni en el 80. Falla igual en la
+fibra y en datos moviles. Y hace un rato funcionaba.
+
+**Casi seguro NO es tuyo.** En España hay bloqueos judiciales por IP durante las retransmisiones de
+futbol que se llevan por delante **rangos enteros del plan gratuito de Cloudflare**, con dano
+colateral a miles de sitios ajenos. Todos nuestros hosts caen ahi. Es intermitente y atado al
+horario de partido: vuelve solo cuando termina.
+
+**Como distinguirlo de una averia de verdad, en tres comprobaciones:**
+
+```bash
+# 1. Otros rangos de Cloudflare, ¿van? Si cloudflare.com responde, Cloudflare no esta caido.
+curl -sS -m 10 -o /dev/null -w "%{http_code}\n" https://cloudflare.com
+
+# 2. ¿Muere el rango o muere nuestro host? Un tercero cualquiera en el MISMO rango.
+#    api.codetabs.com vive en 104.21.x/172.67.x, igual que nosotros.
+timeout 6 bash -c 'echo > /dev/tcp/104.21.58.226/443' && echo vivo || echo muerto
+
+# 3. El veredicto que no depende de esta red: que lo cargue un servidor de fuera.
+#    hackertarget esta en Linode (45.33.x), fuera de los rangos bloqueados.
+curl -sS -m 30 "https://api.hackertarget.com/httpheaders/?q=https://dealtracker.liontechsolution.com"
+#    Y para leer el CUERPO de una URL desde fuera (r.jina.ai vive en 104.26.x, que no se bloquea):
+curl -sS -m 30 "https://r.jina.ai/https://keycloak.liontechsolution.com/realms/deal-tracker-prod/.well-known/openid-configuration"
+```
+
+Si (1) responde, (2) dice `muerto` y (3) devuelve un 200, **el servicio esta perfectamente** y lo
+que falla es la ruta desde aqui.
+
+**Lo que importa para trabajar:** verificar un despliegue desde casa en horario de partido **no es
+concluyente**. Un `curl` colgado no es una senal. Comprueba por dentro del cluster —Service,
+endpoints, logs del pod, ruta cargada en el tunnel— y para el camino publico usa un lector externo.
+No deshagas un despliegue por esto.
+
+Medido el 22/08/2026 a las 21:13 CEST: `104.21.79.172` y `172.67.146.160` sin TCP en 443 ni en 80,
+mientras `104.16.132.229` y `104.26.11.242` —tambien Cloudflare— respondian con normalidad, y
+`dealtracker.liontechsolution.com` devolvia 200 visto desde Linode.
+
 ### Cannot Connect to PostgreSQL
 
 **Symptom:** Connection refused or timeout
