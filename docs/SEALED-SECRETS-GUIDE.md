@@ -71,6 +71,50 @@ kubeseal --fetch-cert \
 `scripts/seal-authentik.sh` los tiene en dos variables (`SEALED_SECRETS_CONTROLLER_NAME` y
 `SEALED_SECRETS_CONTROLLER_NAMESPACE`) por si algun dia cambian.
 
+## Comprobar un sellado ANTES de desplegarlo
+
+Un ciphertext sellado contra el namespace equivocado es indistinguible de uno bueno a simple
+vista, y el fallo aparece tarde: el SealedSecret se aplica sin quejarse y lo que no llega nunca
+es el `Secret`. El controlador sabe decir si puede descifrarlo, y `kubeseal --validate` se lo
+pregunta sin desplegar nada:
+
+```bash
+# Los dos SealedSecret del Keycloak de produccion
+helm template keycloak-prod apps/security/keycloak --namespace security-prod \
+  -f apps/security/keycloak/values.yaml \
+  -f apps/security/keycloak/environments/local/prod.yaml \
+  -s templates/sealedsecret.yaml -s templates/realm-smtp-sealedsecret.yaml \
+| kubeseal --validate --controller-name sealed-secrets --controller-namespace kube-system
+
+# El de su base de datos
+helm template keycloak-postgres-prod apps/data/keycloak-postgres --namespace data-prod \
+  -f apps/data/keycloak-postgres/values.yaml \
+  -f apps/data/keycloak-postgres/environments/local/prod.yaml \
+  -s templates/sealedsecret.yaml \
+| kubeseal --validate --controller-name sealed-secrets --controller-namespace kube-system
+```
+
+Silencio significa valido. Si no, dice `error: unable to decrypt sealed secret: <nombre>`.
+
+Hay **tres formas de que esto falle en falso**, y las tres dan un error que apunta al
+ciphertext en vez de a lo que pasa:
+
+1. **Sin `-s`, no vale.** kubeseal manda por el cable lo que le llegue, y el render completo
+   lleva StatefulSets y ConfigMaps que el endpoint de validacion no acepta. El error es
+   distinto y no habla de descifrar:
+   `cannot validate sealed secret: an error on the server ("") has prevented the request`.
+   Con `-s` se rinden solo las plantillas pedidas; varios `-s` en el mismo comando valen, y
+   varios SealedSecret en el mismo flujo tambien.
+2. **Sin `--namespace` en el `helm template`, tampoco.** `.Release.Namespace` renderiza
+   `default`, los SealedSecret salen con `namespace: default` y el controlador **falla al
+   validarlos TODOS** — incluidos los que llevan meses funcionando en el cluster. Si algo
+   falla la validacion, mira primero el `namespace:` del manifiesto renderizado.
+3. **Re-serializar el manifiesto por el camino** (un `yaml.safe_dump` de python, por ejemplo):
+   plegar un base64 largo a 80 columnas lo corrompe, y el error que sale es el mismo.
+
+Comprobado en este cluster el 22/08/2026, con las dos caras: los sellados buenos validan y el
+mismo chart renderizado sin `--namespace` falla.
+
 ## Encrypting Secrets
 
 ### Step 1: Encrypt Your Values
@@ -146,6 +190,11 @@ PASSWORD_ENC=$(echo -n "dev-password-123" | kubeseal --raw --from-file=/dev/stdi
 # Update apps/data/cnpg/environments/local/dev.yaml
 # Then commit and push
 ```
+
+> **Los tres bloques de abajo son plantillas de sintaxis, no un inventario.** `data-qa` no
+> existe (sus values se borraron en la #44) y `data-prod` existe desde la #62 pero contiene
+> **solo** `keycloak-postgres-prod`: ahi no hay ningun `platform-postgres-app` que sellar.
+> Mira que namespaces hay de verdad antes de copiar uno.
 
 ### Local QA (data-qa namespace)
 

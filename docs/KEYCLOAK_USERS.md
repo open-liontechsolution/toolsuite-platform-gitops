@@ -200,10 +200,12 @@ linea de comandos**. Viaja siempre por la entrada estandar hacia el `-f -` de `k
 
 ## Como comprobar que una credencial vale
 
-Sin navegador, con el client `admin-cli` del propio realm, que si admite `password` grant:
+Sin navegador, con el client `admin-cli` del propio realm, que si admite `password` grant. **El
+host depende de la instancia**: `keycloak-dev.liontechsolution.com` para los realms de dev y QA,
+`keycloak.liontechsolution.com` para `deal-tracker-prod`.
 
 ```bash
-curl -s -X POST https://keycloak-dev.liontechsolution.com/realms/<realm>/protocol/openid-connect/token \
+curl -s -X POST https://<host>/realms/<realm>/protocol/openid-connect/token \
   -d grant_type=password -d client_id=admin-cli -d username=<usuario> \
   --data-urlencode "password=<la contrasena>"
 ```
@@ -244,9 +246,16 @@ credencial se acepta y que el cambio de contrasena forzoso se esta ejerciendo de
   duplicado, y el script lo traduce a un mensaje que remite a `reset`. Ahorra una llamada, y
   correrlo dos veces por error no le pisa la contrasena a nadie que ya este usando la
   plataforma.
-- **El realm por defecto vive en `security-dev`**, que es el unico Keycloak del cluster: dev, QA
-  y produccion de deal-tracker son **realms** distintos de la misma instancia. Se puede apuntar a
-  otro con `KC_NS`, `KC_POD` y `KC_CONTAINER`.
+- **Hay dos instancias de Keycloak, y el script habla con una** (issue #62). Por defecto, la de
+  `security-dev`, donde viven el realm `deal-tracker-dev` y el de QA — que es el mismo. El realm
+  `deal-tracker-prod` vive en su propia instancia, y hay que apuntarle explicitamente:
+
+  ```bash
+  env KC_NS=security-prod KC_POD=keycloak-prod-0 ./scripts/keycloak-user.sh listar deal-tracker-prod
+  ```
+
+  Equivocarse de instancia no da un error util: el realm sencillamente "no existe" en el pod al
+  que has apuntado, y ese es el mensaje que sale.
 
 ## Lo que el alta NO hace
 

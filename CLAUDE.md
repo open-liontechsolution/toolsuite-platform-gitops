@@ -43,10 +43,13 @@ namespace, so multiple environments coexist in one cluster with RBAC isolation. 
 Longhorn storage; `cloud` targets cloud storage classes with larger replica counts/resources.
 
 **The matrix is aspirational — check what actually exists before assuming.** Live namespaces today:
-`data-dev`, `data-casa`, `security-dev`, `security-casa`. There is **no** `data-qa` / `data-prod`, and no
-`cloud` deployment at all; `apps/data/cnpg` had values and Applications for all of them and they were
-deleted in issue #44 (they had never worked — see below). `casa` is a fourth tier, not part of
-dev/qa/prod: the family/home tools (`authentik-postgres-casa`, Authentik).
+`data-dev`, `data-casa`, `security-dev`, `security-casa`, plus `data-prod` and `security-prod` added by
+issue #62 — and those two hold **only the production Keycloak and its database**, nothing else. There
+is still **no** `data-qa`, and no `cloud` deployment at all; `apps/data/cnpg` had values and
+Applications for all of them and they were deleted in issue #44 (they had never worked — see below).
+`casa` is a fourth tier, not part of dev/qa/prod: the family/home tools (`authentik-postgres-casa`,
+Authentik). Note the asymmetry `data-prod` creates: `deal_tracker_prod`, the application's own
+production database, still lives in `platform-postgres-dev` under `data-dev`. Only the IdP moved.
 
 **Env values nest one level deeper than they look.** In a wrapper chart the subchart's own `cluster`
 section is at `cluster.cluster.*`, not `cluster.*` — the first key is the subchart name in the wrapper.
@@ -77,7 +80,16 @@ template. Do not add new secrets to `environments/local/secrets/`; that pattern 
 
 The same plaintext used in two namespaces must be sealed **twice**, once per namespace — the ciphertexts
 differ. That is why the MinIO backup credential appears in both `apps/data/cnpg` (`data-dev`) and
-`apps/data/authentik-postgres` (`data-casa`).
+`apps/data/authentik-postgres` (`data-casa`), and why the Keycloak DB password is sealed once for
+`data-prod` and again for `security-prod`.
+
+A ciphertext sealed against the wrong namespace looks exactly like a good one and fails late — the
+SealedSecret applies without complaint and the `Secret` simply never appears. Ask the controller
+first: render **only** the SealedSecret templates (`-s`), with the destination `--namespace`, and pipe
+that into `kubeseal --validate`; silence means valid. Both flags are load-bearing — without `-s` the
+request is rejected outright, and without `--namespace` every SealedSecret renders as `default` and
+fails validation in false, including ones live in the cluster. Worked example and the third failure
+mode: `docs/SEALED-SECRETS-GUIDE.md`.
 
 ## Common commands
 
@@ -110,8 +122,19 @@ duplicated and pruned.
   often `appVersion` too) and reconcile. cert-manager upgrades follow a deliberate **one-minor-at-a-time
   hop strategy** gated on the target Kubernetes version — read `apps/platform/cert-manager/README.md`
   before touching its version; the recent git history is exactly these staged hops.
+- **There are two Keycloak instances, and the directory decides which realm each one gets.** Since
+  issue #62 production is isolated: `security-prod` / release `keycloak-prod`, its own CNPG cluster
+  (`apps/data/keycloak-postgres` in `data-prod`), its own host `keycloak.liontechsolution.com` served
+  by the **k3s-prod** tunnel. `security-dev` keeps dev and QA — QA authenticates against the
+  `deal-tracker-dev` realm, it has no instance of its own. The split is `realmConfig.path`:
+  `realms/nonprod` for the dev instance, `realms/prod` for production. The ConfigMap glob does not
+  descend into subdirectories, so neither instance can import the other's realm — and a realm file
+  dropped in `realms/` itself is deployed nowhere and fails the render. Anything reaching into one
+  of them (`scripts/keycloak-user.sh`, `keycloak-client-secret.sh`) defaults to the dev pod and
+  needs `KC_NS=security-prod KC_POD=keycloak-prod-0` for production; pointing at the wrong one
+  reports the realm as nonexistent, not as a wrong target.
 - **Realms and clients are declared in git; people deliberately are not.** `keycloak-config-cli`
-  applies `apps/security/keycloak/realms/*.yaml` (PostSync Job + a nightly reconcile CronJob with
+  applies each instance's `realms/` subdirectory (PostSync Job + a nightly reconcile CronJob with
   the checksum cache off). Users stay out for a reason that is easy to get backwards: config-cli
   cannot purge them, and that same nightly reconcile would re-enable anyone you had disabled, so a
   declared user could never be offboarded. They are managed with `scripts/keycloak-user.sh`
@@ -138,8 +161,12 @@ duplicated and pruned.
   generates it and config-cli leaves it alone (with `secret` absent, `isClientEqual` returns true
   without consulting it), so the nightly job does not rotate it. Extract it with
   `scripts/keycloak-client-secret.sh` and seal it in `k3s-local-apps-manifests`.
-- **`keycloak/templates/cloudflared.yaml` is intentionally empty** — cloudflared runs as a sidecar via
-  `keycloakx.extraContainers`, not as a separate manifest. Don't "fix" it by adding a Deployment.
+- **Neither Keycloak instance ships cloudflared, and neither should.** That template is gone: both
+  hosts are served by cluster-wide shared tunnels that live outside this repo — `k3s-nonprod`
+  (ns `cloudflared`) for `keycloak-dev`, `k3s-prod` (ns `cloudflared-prod`) for `keycloak`. The
+  routing table is not in either tunnel's ConfigMap either: they are remotely-managed, so publishing
+  a host means adding a Public Hostname in Cloudflare Zero Trust pointing at the internal Service.
+  Don't "fix" a missing host by adding a sidecar or a Deployment here.
 - Affinity rules in CNPG env values deliberately target worker nodes labelled `performance=high`; the
   comments explain why the worker label is required (to exclude a control-plane node carrying the same
   performance label). **`worker4` is currently the only worker with that label**, which is why both CNPG

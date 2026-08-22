@@ -27,12 +27,15 @@
 # su rol de otra forma. Su secreto se saca con `scripts/keycloak-client-secret.sh`.
 #
 # EL MODELO DE ALTA: contrasena temporal + UPDATE_PASSWORD forzado.
-# El realm no tiene SMTP (`smtpServer: {}`), asi que `resetPasswordAllowed` es false y NO
-# hay "he olvidado mi contrasena". Por eso el alta entrega una contrasena de usar y tirar
-# por un canal fuera de banda y obliga a cambiarla en el primer login: la definitiva no
-# pasa nunca por aqui, ni por un chat, ni por el historial del shell.
-# Mientras no haya SMTP, `reset` es el unico camino de recuperacion y lo ejecuta un
-# administrador. Ver `docs/KEYCLOAK_USERS.md`.
+# El alta entrega una contrasena de usar y tirar por un canal fuera de banda y obliga a
+# cambiarla en el primer login: la definitiva no pasa nunca por aqui, ni por un chat, ni
+# por el historial del shell.
+# Desde la #60 los realms SI tienen SMTP y `resetPasswordAllowed`, asi que el usuario ya
+# tiene su propio "he olvidado mi contrasena" y este `reset` dejo de ser el unico camino de
+# recuperacion — sigue estando para cuando el correo no es una opcion. Lo que NO cambio es
+# el modelo de alta: sigue siendo por invitacion, y las personas se siguen sin declarar en
+# `realms/` por las tres razones de arriba, ninguna de las cuales dependia del correo.
+# Ver `docs/KEYCLOAK_USERS.md`.
 #
 # LAS CREDENCIALES DE ADMIN NO SALEN DEL POD. `kcadm.sh` se autentica dentro del contenedor
 # con las variables que este ya recibe por `envFrom` del secret `keycloak-admin-credentials`.
@@ -47,8 +50,8 @@
 #   ./scripts/keycloak-user.sh alta   <realm> <usuario>     # revierte una baja
 #
 # Ejemplos:
-#   ./scripts/keycloak-user.sh crear deal-tracker-prod ana ana@example.com Ana Perez
-#   ./scripts/keycloak-user.sh listar deal-tracker-prod
+#   ./scripts/keycloak-user.sh crear deal-tracker-dev ana ana@example.com Ana Perez
+#   env KC_NS=security-prod KC_POD=keycloak-prod-0 ./scripts/keycloak-user.sh listar deal-tracker-prod
 #
 # La contrasena se GENERA aqui y se imprime UNA vez. Generarla es lo preferible: 24 caracteres
 # aleatorios son mejores que lo que elige una persona, y ademas es temporal.
@@ -67,8 +70,17 @@
 # Del lado del pod los tres son iguales de discretos: la contrasena viaja siempre por la entrada
 # estandar hacia el `-f -` de kcadm, nunca en su linea de comandos.
 #
-# Entorno (por defecto, el unico Keycloak que existe en el cluster):
+# Entorno (por defecto, la instancia de dev/QA — la de produccion es otra, ver abajo):
 #   KC_NS=security-dev  KC_POD=keycloak-dev-0  KC_CONTAINER=keycloak
+#
+# HAY DOS INSTANCIAS DE KEYCLOAK, y este script habla con UNA (issue #62). Los realms
+# `deal-tracker-dev` (el que usa tambien QA) estan en la de dev, que es la de por defecto;
+# `deal-tracker-prod` esta en la suya:
+#
+#   env KC_NS=security-prod KC_POD=keycloak-prod-0 ./scripts/keycloak-user.sh listar deal-tracker-prod
+#
+# Equivocarse de instancia NO da un error util: el realm "no existe" en el pod al que has
+# apuntado, y ese es el mensaje que sale.
 set -euo pipefail
 
 : "${KUBECONFIG:=${HOME}/.kube/k3slocal.yaml}"

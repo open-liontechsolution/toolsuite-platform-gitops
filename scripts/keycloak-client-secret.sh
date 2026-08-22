@@ -38,11 +38,22 @@
 #   ./scripts/keycloak-client-secret.sh <realm> <clientId>
 #
 # Ejemplos:
-#   ./scripts/keycloak-client-secret.sh deal-tracker-dev  deal-tracker-api
-#   ./scripts/keycloak-client-secret.sh deal-tracker-prod deal-tracker-api
+#   ./scripts/keycloak-client-secret.sh deal-tracker-dev deal-tracker-api
+#   KC_NS=security-prod KC_POD=keycloak-prod-0 \
+#     ./scripts/keycloak-client-secret.sh deal-tracker-prod deal-tracker-api
 #
-# Entorno (por defecto, el unico Keycloak que existe en el cluster — la instancia es una sola,
-# los realms de dev/QA y de produccion comparten pod; ver issue #62):
+# HAY DOS INSTANCIAS DE KEYCLOAK, y este script habla con UNA. Desde la issue #62:
+#
+#   realm                | instancia            | como apuntarle
+#   ---------------------|----------------------|-------------------------------------------
+#   deal-tracker-dev     | security-dev         | (por defecto)
+#   (QA usa ese mismo)   |                      |
+#   deal-tracker-prod    | security-prod        | KC_NS=security-prod KC_POD=keycloak-prod-0
+#
+# Equivocarse de instancia NO da un error util: el realm sencillamente "no existe" en el pod
+# al que has apuntado, y ese es el mensaje que sale.
+#
+# Entorno (por defecto, la instancia de dev/QA):
 #   KC_NS=security-dev  KC_POD=keycloak-dev-0  KC_CONTAINER=keycloak
 set -euo pipefail
 
