@@ -1,0 +1,62 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: keycloak-local-prod
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: tools
+
+  source:
+    repoURL: https://github.com/open-liontechsolution/toolsuite-platform-gitops
+    path: apps/security/keycloak
+    targetRevision: main
+    helm:
+      releaseName: keycloak-prod
+      valueFiles:
+        - values.yaml
+        - environments/local/prod.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: security-prod
+
+  syncPolicy:
+    # SIN `automated`, por el mismo motivo que `keycloak-local-dev` y con mas razon: aqui
+    # el unico realm que hay es el de PRODUCCION. Un auto-sync con prune+selfHeal llevaria
+    # cualquier error de `realms/prod` al IdP sin que nadie lo mirase, y un `webOrigins`
+    # mal puesto tumba el login entero — ya paso una vez (deal-tracker#219).
+    #
+    # La reconciliacion NO depende de que alguien sincronice: de eso se encarga el CronJob
+    # de config-cli de las 04:00 con `cache.enabled: false`.
+    #
+    # El sync se lanza a mano tras revisar el diff:
+    #   argocd app diff keycloak-local-prod --local apps/security/keycloak
+    #   argocd app sync keycloak-local-prod
+    # o, sin la CLI:
+    #   kubectl -n argocd patch app keycloak-local-prod --type merge \
+    #     -p '{"operation":{"sync":{}}}'
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # Igual que en dev: el chart de codecentric no gestiona `replicas` una vez desplegado.
+  #
+  # AVISO, y no es un fallo de este fichero: esta Application va a nacer `OutOfSync`
+  # permanente por lo mismo que `keycloak-local-dev` (issue #68) — la etiqueta
+  # `app.kubernetes.io/instance`, que Argo escribe con el nombre de la Application y el
+  # chart con el del release, y dos zero-values del StatefulSet que el API server borra al
+  # guardar. Esta investigado y no tiene arreglo dentro de este fichero; lo unico que se
+  # puede hacer aqui es no anadir nada que lo empeore.
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      jsonPointers:
+        - /spec/replicas

@@ -1,27 +1,34 @@
-# Realm deal-tracker-prod — produccion de deal-tracker (issue #50)
+# Realm deal-tracker-prod — produccion de deal-tracker (issues #50 y #62)
 #
-# Realm y client PROPIOS, no compartidos con dev ni con QA. Ese es el motivo de la
-# issue: hoy QA se autentica contra el realm `deal-tracker-dev` con el mismo client,
-# y en deal-tracker#219 un `webOrigins` mal puesto en ese client tumbo el login de QA
-# entero. Compartiendo realm, ese mismo fallo se llevaria por delante produccion.
+# Realm y client PROPIOS, no compartidos con dev ni con QA. Ese fue el motivo de la #50:
+# QA se autentica contra el realm `deal-tracker-dev` con el mismo client, y en
+# deal-tracker#219 un `webOrigins` mal puesto en ese client tumbo el login de QA entero.
+# Compartiendo realm, ese mismo fallo se habria llevado por delante produccion.
 #
-# La INSTANCIA si es compartida: esto vive en el mismo Keycloak que dev/QA, servido en
-# keycloak-dev.liontechsolution.com. Los usuarios de produccion veran ese host en la
-# barra al iniciar sesion. Decidido asi a proposito para no bloquear el estreno; el
-# host esta dentro del KEYCLOAK_ISSUER_URL que valida el backend, asi que cambiarlo
-# despues obliga a resellar el secret de `deal-tracker/overlays/prod`.
+# Y LA INSTANCIA TAMBIEN ES PROPIA desde la #62. Este fichero lo sirve el Keycloak de
+# `security-prod` (release `keycloak-prod`), publicado en keycloak.liontechsolution.com por
+# el tunnel de produccion k3s-prod. Antes vivia en la instancia de dev, y aquello traia dos
+# consecuencias aceptadas a proposito para no bloquear el estreno —si esa instancia caia,
+# caia el login de produccion, y los usuarios de produccion veian `keycloak-dev` en la
+# barra—. Las dos se han ido con el traslado.
+#
+# EL REPARTO LO HACE EL DIRECTORIO. `realmConfig.path` vale `realms/prod` en el values de
+# produccion y `realms/nonprod` en el de dev, y el glob del ConfigMap no entra en
+# subdirectorios: por construccion, ninguna de las dos instancias puede importar el realm
+# de la otra. Mover este fichero de sitio lo despliega en el Keycloak equivocado.
 #
 # Contrato con los otros dos repos (k3s-local-apps-manifests, deal-tracker):
-#   KEYCLOAK_ISSUER_URL          = https://keycloak-dev.liontechsolution.com/realms/deal-tracker-prod
+#   KEYCLOAK_ISSUER_URL          = https://keycloak.liontechsolution.com/realms/deal-tracker-prod
 #   KEYCLOAK_AUDIENCE            = deal-tracker-web
 #   KEYCLOAK_ADMIN_CLIENT_ID     = deal-tracker-api      (el alta por invitacion, issue #61)
 #   KEYCLOAK_ADMIN_CLIENT_SECRET = el que genera Keycloak, sellado alli
-# Estan escritos en deal-tracker/overlays/prod/secret.example.yaml. Si cambia el nombre
-# del realm o del client aqui, alli deja de validar ningun token. Las dos ultimas son
-# opcionales del lado de la aplicacion: sin ellas arranca igual y el registro responde 503.
+# Estan escritos en deal-tracker/overlays/prod/secret.example.yaml. Si cambia el nombre del
+# realm o del host aqui, alli deja de validar ningun token. Las dos ultimas son opcionales
+# del lado de la aplicacion: sin ellas arranca igual y el registro responde 503.
 #
-# `webOrigins` espera ORIGENES DESNUDOS. Leer la cabecera de deal-tracker-dev.yaml antes
-# de tocarlo; el template lo rechaza en tiempo de render.
+# `webOrigins` espera ORIGENES DESNUDOS. Leer la cabecera de
+# realms/nonprod/deal-tracker-dev.yaml antes de tocarlo; el template lo rechaza en tiempo
+# de render.
 
 realm: deal-tracker-prod
 enabled: true
@@ -171,8 +178,9 @@ clients:
   #
   # Contrato con el otro lado: KEYCLOAK_ADMIN_CLIENT_ID=deal-tracker-api y
   # KEYCLOAK_ADMIN_CLIENT_SECRET. Su ausencia apaga el registro entero (503), no rompe el
-  # arranque. Ojo con la #62: al trasladar el realm a la instancia aislada, el secreto NO
-  # viaja —la instancia nueva genera otro— y hay que re-sellarlo junto al KEYCLOAK_ISSUER_URL.
+  # arranque. El secreto que vale es el de ESTA instancia: al trasladar el realm en la #62
+  # el de la instancia vieja dejo de servir, porque Keycloak genera uno nuevo al crear el
+  # client. Si alguna vez se vuelve a mover, se re-sella junto al KEYCLOAK_ISSUER_URL.
   - clientId: deal-tracker-api
     enabled: true
     protocol: openid-connect

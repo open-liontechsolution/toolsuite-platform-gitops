@@ -8,7 +8,8 @@ This directory contains ArgoCD Application manifests for deploying Keycloak acro
 argocd/
 ├── clusters/
 │   └── local/
-│       └── dev.yaml      # Local dev cluster (el unico que existe)
+│       ├── dev.yaml      # Instancia de dev/QA  -> ns security-dev
+│       └── prod.yaml     # Instancia aislada de produccion -> ns security-prod (issue #62)
 └── README.md
 ```
 
@@ -28,6 +29,14 @@ argocd/
 kubectl apply -f clusters/local/dev.yaml
 ```
 
+### Deploy to Local Prod
+
+`apps/data/keycloak-postgres` tiene que estar desplegado antes: esta Application no crea su base.
+
+```bash
+kubectl apply -f clusters/local/prod.yaml
+```
+
 ## Application Configuration
 
 Each Application is configured with:
@@ -36,7 +45,9 @@ Each Application is configured with:
 - **Source**: GitHub repository `open-liontechsolution/toolsuite-platform-gitops`
 - **Path**: `apps/security/keycloak`
 - **Target Revision**: `main`
-- **Sync Policy**: Automated with prune and self-heal
+- **Sync Policy**: **manual, sin `automated`** — las dos. Un auto-sync con prune+selfHeal llevaria
+  cualquier error de `realms/` al IdP sin que nadie lo mirase. El razonamiento completo esta en el
+  comentario `syncPolicy` de cada fichero.
 - **Namespace**: `security-{env}` (auto-created)
 
 ## Monitoring

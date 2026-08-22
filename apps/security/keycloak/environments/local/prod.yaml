@@ -1,0 +1,198 @@
+# PRODUCCION — instancia de Keycloak AISLADA (issue #62)
+# Namespace: security-prod
+# Base de datos: keycloak_prod @ keycloak-postgres-prod, namespace data-prod
+# Host publico: keycloak.liontechsolution.com, por el tunnel k3s-prod (ns cloudflared-prod)
+#
+# POR QUE EXISTE ESTE FICHERO. Hasta la #62 el realm `deal-tracker-prod` corria en la
+# instancia de dev (`security-dev/keycloak-dev-0`, keycloak-dev.liontechsolution.com). Se
+# acepto a proposito para no bloquear el estreno, con dos consecuencias escritas: si esa
+# instancia caia, caia el login de produccion, y los usuarios de produccion veian
+# `keycloak-dev` en la barra. La v0.8.0 abre el registro por invitacion, y mover un realm
+# con dos usuarios es un export/import mientras que moverlo con cien es una migracion con
+# gente dentro. De ahi el orden: traslado primero, registro despues.
+#
+# NO ES UNA RESURRECCION del values de `prod` que existio desde el commit inicial. Aquel
+# nunca se desplego y no habria funcionado (anidaba bajo `keycloak:` cuando el subchart es
+# `keycloakx`, apuntaba a namespaces inexistentes y llevaba REPLACE_WITH_ENCRYPTED_*).
+# Esta escrito de cero sobre el de dev, que si funciona.
+
+keycloakx:
+  fullnameOverride: keycloak-prod
+
+  replicas: 1
+
+  command:
+    - "/opt/keycloak/bin/kc.sh"
+  args:
+    - "start"
+    - "--hostname-strict=false"
+    - "--proxy-headers=xforwarded"
+
+  extraEnvFrom: |
+    - secretRef:
+        name: keycloak-admin-credentials
+    - configMapRef:
+        name: keycloak-config
+
+  service:
+    type: ClusterIP
+
+  # El Ingress se queda apagado: la publicacion la hace el tunnel, no un Ingress.
+  ingress:
+    enabled: false
+
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "2Gi"
+
+  podLabels:
+    app.kubernetes.io/part-of: security-platform
+    environment: prod
+    deployment: local
+
+  # Solo nodos worker, igual que dev: los control-plane de este cluster no resuelven
+  # registries externos de forma fiable.
+  affinity: |
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node-role.kubernetes.io/worker
+                operator: In
+                values:
+                  - "true"
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                {{- include "keycloak.selectorLabels" . | nindent 12 }}
+            topologyKey: kubernetes.io/hostname
+
+  volumeClaimTemplates: |
+    - metadata:
+        name: keycloak-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: longhorn
+        resources:
+          requests:
+            storage: 5Gi
+
+  extraVolumeMounts: |
+    - name: keycloak-data
+      mountPath: /opt/keycloak/data
+
+  # Acceso externo: keycloak.liontechsolution.com lo sirve el tunnel compartido de
+  # PRODUCCION (k3s-prod, ns cloudflared-prod), el mismo que ya publica
+  # dealtracker.liontechsolution.com. NO el de no-produccion: meter el login de produccion
+  # en el tunnel que sirve dev y QA es justo el blast radius que motivo tener dos.
+  #
+  # La ruta NO esta en ningun repo: el tunnel es remotely-managed y la tabla vive en Zero
+  # Trust (Networks -> Tunnels -> k3s-prod -> Public Hostnames). Los valores exactos:
+  #   Subdomain  keycloak
+  #   Domain     liontechsolution.com
+  #   Path       (vacio)
+  #   Type       HTTP
+  #   URL        keycloak-prod-http.security-prod.svc.cluster.local:80
+  # El puerto es el del Service (80), no el del contenedor (8080). El TLS lo termina
+  # Cloudflare; el salto interno va en claro por la red del cluster.
+  #
+  # Y el host NO es libre: entra en el KEYCLOAK_ISSUER_URL que valida el backend
+  # (k3s-local-apps-manifests, deal-tracker/overlays/prod). Cambiarlo aqui obliga a
+  # resellar alli.
+
+  extraManifests:
+    - |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: keycloak-config
+        namespace: {{ .Release.Namespace }}
+        labels:
+          app.kubernetes.io/name: {{ include "keycloak.name" . }}
+          app.kubernetes.io/instance: {{ .Release.Name }}
+      data:
+        KC_HEALTH_ENABLED: "true"
+        KC_METRICS_ENABLED: "false"
+        KC_HTTP_ENABLED: "true"
+        KC_HOSTNAME_STRICT: "false"
+        KC_DB_SCHEMA: keycloak
+        # El headless es el de ESTA release. Copiarlo de dev deja a los pods buscando
+        # miembros del cluster de dev, que es un fallo silencioso mientras haya un replica.
+        JAVA_OPTS_APPEND: "-Djgroups.dns.query=keycloak-prod-headless"
+
+# Credenciales de admin y de la base de datos.
+#
+# SELLADAS CONTRA security-prod, y NO son las de dev: el sellado va atado a namespace +
+# nombre, asi que los ciphertexts de `security-dev` no valen aqui aunque el plaintext
+# fuera el mismo. El admin de esta instancia es propio y distinto del de dev — que es
+# medio motivo de aislarla.
+#
+# KC_DB_PASSWORD lleva el MISMO plaintext que `sealedSecret.encryptedData.password` de
+# apps/data/keycloak-postgres/environments/local/prod.yaml, sellado una segunda vez contra
+# el otro namespace. Si se rota, se rotan los dos en el mismo commit: si divergen, Keycloak
+# no arranca y el error que da es de autenticacion contra Postgres.
+sealedSecret:
+  enabled: true
+  name: keycloak-admin-credentials
+  encryptedData:
+    KEYCLOAK_ADMIN: AgCNGmNrBtrMSFbHeYpDvvUopWuqWr6uzhDMUNZgSzGm5ldIuLTgndMAyVpOsO/fLOQAR2rk2p6rxD/tGyC4bXw7D4ZLh9ZIYllplfLseEjvrFWYlReXPMw5fusJyELudBvAPdfLWRm+ENlSzw8aggXzdIzabJQeeH8Zk7JBOlCI1Nk4xKxVJzET4G7T4CUB4+m7pb+Z9ufeVZfCDXdBgOwldLWGTsYQiFx4v0MJeC/dvMMnX4b0Fiqum3e4IddnntShZQI3/3c5NWo/9Uld9LQNBt4MWJ0oav6vw8t338NYSFUQVfbhRClrCnECUJr4fYUNB1hHVpvf6rZ8q1RarDU8I957Atz9ynYo5PRvhKiO8z1GvDMhmcy+XvWsXd0ygRRnuV9V/8lxT9caHyaCNgjgWFFE5JCm3yOf75Yoxl/zHRmQf9ueD1CdBJGbQ/A1FsVTTsIPVzEdTxR/fVEog0rkResDcO7o/8TvLW0vBa6w5s4C8ZHeARVI2AZYmDQBxdyfyLiTeCM8VGsm8bO/24cKiJAcyiVZdtHWVCu1grEj4/2P0ZOmk/hr83BainYxqIUgXW2Pkm0VlMlZ3EKNdQ+np2uyu/Q2Iinqo5upiKKzBQjVQ6E0O8GkRuB5LUK+M96WgR5XGraB1yxf5n88950y7CyyEiHjjXyeCvVfEgQ6Hi7Wv8iWEWhLcpvlZ33gfW1PyTquiQ==
+    KEYCLOAK_ADMIN_PASSWORD: AgCRANnQTWShvuyEYxqcJ3YMvHlcvOpENwUaiKk63IiCdqzGMyzqtoM1KkqDQ3v4Kv3F7eyIBtY7h3syjpCVOBP1QDBZ8aDFFcNAZd+EW3BiE/Lw+WU4MRUEGKNMcE2Pu8RFqwWFBHCSXhm+z25qVUohyZKc7kxwLGOp2qqno+COnTXpwC3j1QTNK9pGsIsS9LIlFdCid+0buvg1jdy6m36kKuR91HxQkAfuTQmyECyfCJIxFWanmagitpwOugjzHttGwZaxnxtxO3Cgutsc9suEHK+qI0U577eUcXwqrOcj/7IUbvBrFg8gV4cTkJ5pJG17QwdAh/x/XP5spdNo6rzkR2qAcyqS5W4WnM4He5BHkwwW98Xo3qhhSgrVWz8sSHFfvmasbV3fPve/3wze0afwmFngtxwNcvhxKEywKcw0w94pGHOW2LPwLY6eRKP/Sd/2euzMI7Po2lOuhL9fm7Rz3eJ3Vj4WHzBM3ocwvmG1tGCnT6dzewbjRPsSm2A/++ZqgKz7Ix8aM7g6FNsjDPrb0AUxw72INNHpdGxqMnJ0shIrVRKB6g1CtxRokxoHUCZHWTAlYNg3bw8LumfAK4RGfwWOrb/QhCcwBabWALOIyoDQsqtkEUvLmns3zOYl8dJDojMhHlt1nfeEKdAWXAGaFwCwkoFIoedg0MCX64EwZVPIy9sNB83N6WpzWOaTLHi7QaYq3yKyC/qpNxsR4YFM81u9fSzP7qhogO1238dS3g==
+    KC_DB: AgBT32YMY9LmSAVKrOsXDG3uivmGaHNfemfIUZno8jK1j9ZEFeTgj7zZEAraSf//POUopeYmxB7doR8Q7baYL7uUFialCTxcr0kOIyGjUmnDyc8YdHOo5H7OmyI2WHqt/yyQSRmMAsh8T2p27tGAxopn+1P0ay4fBNtfEZIuoI0pa/SplbvNv7aInyEMMzJAKqnDS7VqlFPRpy5WxYfSMquiTZDeUrPId186OOcJJBOfjIZjeB1gWaS8mVidFE69xQHghIeQXloLjQTorSRQd62sK1gTuOwkKcH+i1Jt0rVskNEk+lfWYmZNa/MdzYKxWzRJbcTizUsWMj9U0XXrmJcr25BShGnF4LCCkd2ESu5mAItGXrOIZyMuqeGmcnpiSFWSb5kqNF/P9+fcM3SBlMrwY5SD2jbXeFJr1TEfgzeSr8p75nquwkEAo+FvnTUgkt35oyumTJTMmUl9Tr5l1OtStVedSV+w/869msTDMoUb8faKD6yrDazA/euXh4bJpCNZVgh2k6k12WwrmY0V1/na4QhwwYmOleCH/8PErVOyi5c0YJlWymoPfWgEwE/xjmcoafP683NyqUDWgpyhVopwtQct643wFAyRxx2Kz8qxkWqGHyPk9t5GTrXGqLgBlekfkv2f5yL3xmrmGDjXHpMQJyoeG9Tru4ZAI2oJU+0ff49NYUcEb/9XMFdt2ysllk3eAQYOn7O4BA==
+    KC_DB_USERNAME: AgAv4hC248aYoYCVCls1e7dsJE4OfGyqeK8WB2cp3iwQrIVQ4vb4gu1w1eJzaRP4K//8Jjub8n9HS3Og43z6TlKzyMlxOBX1x0CdoPaTE1xWHYf/O5qeiW1tokwt+IGaidjDFqL0Gnepo0CU/yLf8rmCZKb5jDnTdni2G6CSDA7blEeNUXFIwIUTl3a/tefBwN5NaFnYo1dPHR8kVluN0yMZJmJDy6jKkMqlzI3MZHz6Tr0tFjXek18qk5NfTLIJLeBNRfE2C9zyvFvPPVPT8n7dULDXhEyr6Wk19fV01v0NSSyvQznva8BaXY1/rtmtAUoswAGukehJgOjWEI9j2Mj2ImeCF0QPLcUS5OX02M5YDIULInvM+8tqyp1fXuTkL0fKcmZbLasaHJ7tsyjeyscTUa1wosgPt2ZjYU4w4TFN0Bn/noNHw9FFhqAdno8Xxv+7UCKveK9HnH36ZTGxi36HuuMrdZB3oA5rmFIRNAqB/HyaNYpEBleSLNrR1uo8ET4JnHiB5lnhIpQo4JgNtBMkGnbp5X/kLVykJ7USLx5YipE1HskaSRYYNIOECwtWWD1ZthFBTol5kHLvFliKDGOzfHV8AxBAf+Ll/M1Th0nCKP0tRmxGKqwZb7GxBBAkbjTMtHa++f9nhTFy16aI19DhkjNygCsvCYiNrDC9YpdG9fEXs0UrJD08Wv+NX3jAKrItvYKRYr4t00lHdKcN
+    KC_DB_PASSWORD: AgB8R+vxCBiJy60tr6YWLtn+Z+TdDFB3PPpW83nrvTEw157VDqUNFx+aT7uJKlbCsTwUi4C+n+IKje/ZHx7zZnhw4Qml4kbpbdt7Nqs9t1ipRZBqplnTc+SF2Xlj/+YOgBVsv5Eq/9uJ1s/Vitac06YZxGDgqfSLf0McOUgSKiHW90k+iHxGQt/TPpe07Z7Ie0rG9i4G57jSIHQF1f5DDjsy+z8cNyKVYgSjcl03sLYmnM54qBVzJ4+OBx7PWvyWYhxwg+zW0abEjji8QxjS3VxSk3RnGuqisb4kYBjLVy9yEGoPL0XJ+OwZsqs3aXQty0q3G19k6e9M9eAlMcH1SmWBT35GEi6M7aux8vN5m8T6aB2NTXNAnJr+KbAUoX7jGEU84uIZfOY28hBZa/PVXbFzCisjBHB0iQVgacSCaYNz2EO89MU/0ocvw7SPmnKJQfmHJPuNSRLHLJPQFSW0T/69Q323MbENsnKlW61mP96GCfPW1osVqfLLSit3A0Cq4SXL0/2Lt4sdfC8W9TsIXzN9YqmCBwHmvDeFMDn40EIn9JcIOnJZoUBGw3rmm2rYtor+9Uby/Qj3Y9v7gxIiSadGx4quEhpePMYXLaT7ohVRn5qcadTdv/h9O9sLOOTAa2wceE02FRulSm7zCVNaSPd5gW2Fa2P/+hHn1KyaplMYmjniVUoxSLo+DSeoXdnn3GFm3Tuggpf8EVEBY08K5M44clJNz8fOCbsWWwLbTMmizg==
+    KC_DB_URL_HOST: AgCO1oZBZSobm64/XOSqw5/ajUk4aXPnfwtdGFZnB5DZs3jdXwpYq/Wjc+zGLHqPL7WiKsWOpmVlvqsdDS4Bl2k3SExciZdfRXPTLpPDWxGydS+zE/QU8AbcsMs4RwF8E9v0uTuOjsYrosqnyym4cZS+cectEwYUQsdGgu8weUNsM5+fxMq0inyXO0E4UrBA31Vq4lHVhcqRlZWnfaCHR2jgQTOR/gzyBEIHCwPvgiqfjNoU04RMdC71WAsFTabcoWuarThLQy+VlnD1evq9aBaCOcsPBGY+ZL0/T+OYHz13Z419IuslwczoYJ+MPP6vgYabRrVMiysjNpFqaUC0V2YUNJ3UZj6EzKobe3abowjnyF0syJjxKXJYgXGl3K+6NKn8O02MlGJ2hNjKIDPwQ9Ve70pNzky6HqCOn1ZZVyDbCE6bcA4T+ix8khy2mYBkOAEO4ivqMahgCX6ryX2EsAk4p0HITsrP/SltdyR+z0zlxKWgBTxT3Y1vGWxVYh7Ho3TEUsXJFaHNFD1G3OhtHfpD0Qcq7s6xbcWwsbp9Vf9kNI5hWA0LZkTNVmy4QlGvDqn7OWJObtcwy9eAzy3hVdUJmLwX41Tosds07dwckSUIn0cPkuks/2schT+4nNzgs+cLPJxIuhmrAUJI0lcTC90YMAUQ7940zWFhZVMwgv3miwxnI+9RMOPLSae/csICxmJz8IyJl3WJPf7L7iDF+pnkDPJJa5t1bARlFgtOUbv+YizOfg==
+    KC_DB_URL_PORT: AgB/Fv57hLc8HUQ6BNKTMl9eiyOeO/ilkjpzJiGWv4pj9PpxFOACil/g8hVUtSWymjknzH4+vFgNBwpK4jWAoKiSs49lNW/lu+NIEK/2jgJAexJYlC7vbjuvjE+MhO3bpvXAaMg/F4CtlUXdu24vzvEy+DKub+QjXhA2KojBECSdfwtROGcEfrRZWAcDzujKv6oISBCe+TkqAxmtGjCgAAiAwSLhn4zPEW2vEzzU1J0SsprK2DbfgRgkdncQUiq4Uw6vxd7DrVgKLlEqsTP3GXIbl/PnsUtj2r22vwhD9M6ae1ENsUs0j1UTflenoXoPSm7gj6bC8cdU+Lw3PTPm+fGinvZM145qNv+D5E8/RYRflVDYJBqKrYoWrI1nkAjnaswIKIoBUemf8+7CpanNjQY1czshhqUf7+4X+Iz2M0Tb3MJFJNKcBI928qQNx4vkjhVsM2kJCQESylqwfaLHN0MrJdS27CuwAFxghascQDB/HJhCcyc87DF7PRCy6hrIegi9IhIO+Dg68bmlNlUdlw//JYN8JI/rvADqwRi1S2GD4ibWwOYgLgh53aitkO0JLzIt6SnXxW6omyVy2/lOJgr5FwQbRkgPFVLkc5vImAf8Og5MutyQfZE3yj1giUUM8J/pC0ttrc/r7ecEaQdh156NaigX/Uy+Xl6aQharBXxxYediQqoCQ+gsuwVSFcXAa7W1wFoy
+    KC_DB_URL_DATABASE: AgBH87YXSfNeQ6ANqWqXq4k0FEYkM6nTbjnmoXNEkKzAnSzmzSRqkQbTbbKbjQZiJiNqbIHJKtHKpUWd5C0sgVg4Gt2rTs/0//EMYhaI+hXHMsKfg77nk3m17orGhEZLh3Hvxcf3iOfwNTrXzX5cyhME44EnThD/pQ6DPcOfwkbc0v7pWCvLn/X47OtftmS51UZpvAkRekakfKfeiIGQJfJGUlCeqVkvQErY+gfGbIF9uQx+CBp6c5nMyu6i26P1xsYGNKEFzCaATCFyL3mwRBNiqHBcsXv2P7xR4da7vHm+my9nBzSjGAC/h3AEAMdFkrbk9zj+9i6ySHuXECkq7Q40tdkKWsBwYSEibf9HFbG0JCzuCavZzD5IoC4OVPoK8FSQl7o+XxR3jvGhxCeSOnTZlMAygezcxtn3QtERWSqDpIzxaVA9f0bW1+2BkqMYAk+KsB352QSV4Fjw7Y0uXt6XPXCCbaKgb/JoAVWsBMTjH3qpzE3uEtVaXRCqdJbBu2OFJzRKE888284LEo8nxERGbdzoJf0keHr2dZjzcC15kBp5+CX5vr9XgEVsACvHT+r7SEIuHpxpdPi/gFpu6xiBv8v2ETqJaKfPFsKbgfatppt1GMUR3CDSDhZjpY7OM/E09ByTN0Y/GQcZuWPWwfD7J4RZMmZeQ+3U4IgG1qTiEcR3VAq8z3sPdH05PoQLtdAn5DuSueh3/dPsr8Am
+
+# NetworkPolicy de egress. `databaseNamespace` apunta al CNPG propio de esta instancia,
+# no a data-dev.
+networkPolicy:
+  enabled: true
+  databaseNamespace: "data-prod"
+  # Salida a smtp.resend.com:587. Es la UNICA regla de esta policy que sale de verdad a
+  # internet (las demas van por namespaceSelector, que solo casa pods del cluster). Sin
+  # ella Keycloak no manda un correo y el sintoma se lee como "no llega", no como un
+  # socket cortado. Ver el values base.
+  smtp:
+    enabled: true
+
+# Realms declarados en git. El resto de la configuracion esta en el values.yaml base.
+realmConfig:
+  enabled: true
+  keycloakUrl: "http://keycloak-prod-http"
+
+  # SOLO el realm de produccion. El glob no entra en subdirectorios, asi que esta
+  # instancia no ve `realms/nonprod` y la de dev no ve este. Ese reparto es la mitad del
+  # aislamiento: la otra mitad es el pod.
+  path: realms/prod
+
+  varSubstitution:
+    enabled: true
+
+  # LA API KEY DE RESEND, RE-SELLADA CONTRA security-prod. Es el mismo plaintext que en
+  # el values de dev —la misma key de Resend, que sigue mandando desde el dominio
+  # verificado de produccion— pero el ciphertext de `security-dev` NO vale aqui.
+  #
+  # PENDIENTE DE PEGAR. Con el valor vacio el render falla a proposito (el template lleva
+  # un `required`), que es mejor que desplegar un config-cli que aborta el import. Y con
+  # `varSubstitution` encendido y la variable ausente, config-cli aborta el import ENTERO
+  # en vez de escribir "$(env:...)" como contrasena de correo.
+  #
+  #   kubectl -n security-dev get secret keycloak-realm-smtp \
+  #     -o jsonpath='{.data.SMTP_PASSWORD_DEAL_TRACKER_PROD}' | base64 -d \
+  #   | kubeseal --raw --from-file=/dev/stdin \
+  #       --namespace security-prod --name keycloak-realm-smtp \
+  #       --controller-name sealed-secrets --controller-namespace kube-system
+  smtpSecret:
+    enabled: true
+    name: keycloak-realm-smtp
+    encryptedData:
+      SMTP_PASSWORD_DEAL_TRACKER_PROD: AgBE4vkHYkaiFWXPvDzvayibT0IuR1eUHClFAFe3fRQNqBuh6HoOJ2yu7Aw1hBoMZws1weVIbgs9gOM33hOxDHWBKShDX8LU4ec+pA87D0nmfqCNXyX6xamMsQ8pbiy51g5FR+Cm+toUi/Ejkf8vemE/f1czvhWZ5/PC+3/iM/jUWPV4aNQiGTFnC0e8xjlUtofjzHK1x5o9IkbMQGiW5veYtPw/00ksw+iWvb/31lX5B8baS2ZX/Uq0EEtEcYtl4D5tDcH9PzAqeEdr+uvKiJKIeQXh5/ESyXMVZgh9ucGMvBkAKWvboZjv3F9w5B0jbJMS/Qpl/snfh/lNiKt3EZ7Eg4s3oVcTHJkula5n88L7CkfZEmIvCXSa7w+DecrJM4A3yIZ8qAn3skQRNGDezJCak0hzmHebjgpDwUQEUkYvYj2zp2R9N/EI6VhdrZQq/M/iPCxUWDene8wTTh20RCHrfaZrCllP4umst41/8iMnCPB93/9HJ7jvZMQ9toQy1zWnsqnVPVDQ09+oQtkMqIZcF3VH3sPCW62wboIvYAuc0j8R8mlkKxLluI9QIIYu/Mwq5JMFUZd1rA/LO4tZCMG2Bl3JFDKLqd+D/DC15kIKQF6M7cMDrCdc58GdQzfGEGwd+yYSGoRgNVDr6EBpoulEo8CNwL16XnyP1VxPTm6xQ0t983ew53i9SoIf4cqWanimqOUvXA7+CndHU+67X58ySoKg2z4X9vmAFp3YXwTo8Rh6/ss=

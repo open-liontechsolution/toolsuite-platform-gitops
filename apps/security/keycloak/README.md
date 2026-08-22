@@ -25,18 +25,40 @@ Keycloak is a high-performance Java-based identity and access management solutio
 
 ### Local Environments (k3s + Longhorn)
 
-| Environment | Namespace     | Replicas | CPU Request | Memory Request | Database                    |
-|-------------|---------------|----------|-------------|----------------|-----------------------------|
-| **dev**     | security-dev  | 1        | 250m        | 512Mi          | keycloak_dev @ data-dev     |
+| Environment | Namespace     | Replicas | CPU Request | Memory Request | Database                          | Host publico                     |
+|-------------|---------------|----------|-------------|----------------|-----------------------------------|----------------------------------|
+| **dev**     | security-dev  | 1        | 250m        | 512Mi          | keycloak_dev @ data-dev           | keycloak-dev.liontechsolution.com |
+| **prod**    | security-prod | 1        | 250m        | 512Mi          | keycloak_prod @ data-prod         | keycloak.liontechsolution.com    |
 
-**dev es el unico entorno que existe.** Hubo values y Applications de `qa` y `prod` desde el commit
-inicial, nunca desplegados y que no habrian funcionado: anidaban bajo `keycloak:` cuando el subchart
-es `keycloakx`, apuntaban a `data-prod`/`data-qa` (namespaces que no existen) y llevaban
-`REPLACE_WITH_ENCRYPTED_*` en los secretos. Se borraron; escribirlos de nuevo cuando hagan falta
-cuesta menos que confiar en ellos.
+**Son dos instancias separadas, no dos entornos de la misma.** dev sirve los realms de dev y QA;
+prod sirve solo `deal-tracker-prod`. Cada una tiene su pod, su base CNPG, su namespace, su tunnel de
+Cloudflare y su admin. Hasta la issue #62 habia una sola y el realm de produccion vivia dentro de la
+de dev: si esa instancia caia, caia el login de produccion, y los usuarios de produccion veian
+`keycloak-dev` en la barra. Las dos consecuencias se aceptaron para no bloquear el estreno y se
+fueron con el traslado.
 
-El prod de deal-tracker no necesita una instancia nueva: estrena **realm** propio en esta, declarado
-en `realms/`. Ver la issue #50.
+`qa` no tiene instancia y no la necesita: **QA se autentica contra el realm `deal-tracker-dev` de la
+instancia de dev**, que es lo que la #50 dejo montado a proposito.
+
+Hubo values y Applications de `qa` y `prod` desde el commit inicial, nunca desplegados y que no
+habrian funcionado: anidaban bajo `keycloak:` cuando el subchart es `keycloakx`, apuntaban a
+`data-prod`/`data-qa` (namespaces que no existian) y llevaban `REPLACE_WITH_ENCRYPTED_*` en los
+secretos. Se borraron, y el de `prod` que hay hoy esta **escrito de cero** sobre el de dev — no es
+aquel resucitado.
+
+### Que realm ve cada instancia
+
+Lo decide el directorio, no una lista:
+
+| Values | `realmConfig.path` | Realms que importa |
+|---|---|---|
+| `environments/local/dev.yaml`  | `realms/nonprod` | `deal-tracker-dev.yaml` |
+| `environments/local/prod.yaml` | `realms/prod`    | `deal-tracker-prod.yaml` |
+
+El glob del ConfigMap (`<path>/*.yaml`) **no entra en subdirectorios**, asi que por construccion
+ninguna instancia puede importar el realm de la otra. Mover un fichero de directorio lo despliega en
+el Keycloak equivocado; anadir uno a `realms/` a secas no lo despliega en ninguno, y el `fail` del
+template lo dice en el render.
 
 ## Database Setup
 
@@ -62,7 +84,11 @@ GRANT ALL ON SCHEMA public TO keycloak_dev;
 \q
 ```
 
-Repeat for QA and prod environments with appropriate names (`keycloak_qa`, `keycloak_prod`).
+**Produccion no se crea asi.** `keycloak_prod` vive en su propio cluster CNPG
+(`apps/data/keycloak-postgres`, ns `data-prod`) y la crea el `bootstrap.initdb` del chart con la
+contrasena que trae su SealedSecret: no hay que tocar `psql`. Ese chart va **antes** que este.
+
+Y no hay entorno `qa`: QA se autentica contra el realm de dev.
 
 ## Secrets Management
 
@@ -179,15 +205,16 @@ helm upgrade --install keycloak-dev . \
 Apply the ArgoCD Application manifest:
 
 ```bash
-# Deploy dev environment
+# Instancia de dev/QA
 kubectl apply -f argocd/clusters/local/dev.yaml
 
-# Deploy QA environment
-kubectl apply -f argocd/clusters/local/qa.yaml
-
-# Deploy prod environment
+# Instancia de produccion (requiere apps/data/keycloak-postgres desplegado antes)
 kubectl apply -f argocd/clusters/local/prod.yaml
 ```
+
+**Las dos Applications son de sync manual, a proposito.** Aplicar el fichero no despliega: deja la
+Application `OutOfSync` hasta que alguien revisa el diff y sincroniza. El motivo esta escrito en el
+`syncPolicy` de cada una.
 
 Monitor the deployment:
 

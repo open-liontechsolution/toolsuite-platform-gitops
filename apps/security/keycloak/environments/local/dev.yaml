@@ -138,6 +138,11 @@ realmConfig:
   enabled: true
   keycloakUrl: "http://keycloak-dev-http"
 
+  # Solo los realms de no-produccion. Desde la #62 el realm `deal-tracker-prod` vive en
+  # `realms/prod` y lo sirve su propia instancia; el glob no entra en subdirectorios, asi
+  # que esta instancia no puede volver a importarlo por accidente.
+  path: realms/nonprod
+
   # La contrasena del SMTP entra por `$(env:...)` desde el SealedSecret de abajo (issue #60).
   varSubstitution:
     enabled: true

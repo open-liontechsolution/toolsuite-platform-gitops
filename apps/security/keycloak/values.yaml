@@ -115,7 +115,13 @@ realmConfig:
     tag: "6.5.1-26.5.5"
     pullPolicy: IfNotPresent
 
-  # Directorio del chart del que salen los realms (glob *.yaml).
+  # Directorio del chart del que salen los realms (glob *.yaml, que NO entra en
+  # subdirectorios). Ese detalle es lo que reparte los realms por instancia desde la
+  # issue #62: `realms/nonprod` lo ve el Keycloak de dev/QA y `realms/prod` el de
+  # produccion, y ninguno de los dos puede ver el del otro.
+  # SIN VALOR UTIL POR DEFECTO A PROPOSITO: `realms` a secas ya no casa ningun fichero,
+  # asi que un entorno que se olvide de fijarlo revienta en el render con el mensaje del
+  # template en vez de desplegar un config-cli sin realms.
   path: realms
 
   # URL interna del Keycloak a configurar. Depende de fullnameOverride, asi que se fija
