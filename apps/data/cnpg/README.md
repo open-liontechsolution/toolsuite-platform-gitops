@@ -74,6 +74,34 @@ significaba que un rollout provocado por cualquiera de los otros inquilinos era 
 Era **la única** base declarada además de la del initdb, así que este cluster se queda otra vez sin
 ningún role en git y con cinco de sus seis bases sin escribir en ninguna parte.
 
+### Quitar el último role de `cluster.cluster.roles` no lo quita del cluster
+
+Medido el 23/08/2026 retirando `deal_tracker_prod`, y es el mismo modo de fallo que el resto de
+este chart: **silencioso**.
+
+Al dejar `roles: []` el subchart **omite el bloque `managed:` entero** del `Cluster` renderizado —
+no emite `managed: {}` ni `managed: {roles: []}`, sino nada. Y un campo que no está en el manifiesto
+deseado no es una diferencia para Argo: la Application reporta el `Cluster` como **`Synced`** con
+`spec.managed.roles` todavía vivo en el cluster.
+
+Lo que eso deja montado, si se sincroniza con `prune`, es lo peor de los dos mundos: el
+`SealedSecret` del role **sí** se prunea (ése sí desaparece del render), y el `Cluster` se queda
+declarando un role con un `passwordSecret` que ya no existe.
+
+El orden correcto es quitarlo del objeto vivo **antes** de sincronizar:
+
+```bash
+kubectl -n data-dev patch cluster platform-postgres-dev --type json \
+  -p '[{"op":"remove","path":"/spec/managed"}]'
+kubectl -n argocd patch app cnpg-cluster-local-dev --type merge \
+  -p '{"operation":{"sync":{"prune":true,"syncOptions":["CreateNamespace=true","ServerSideApply=true"]}}}'
+```
+
+Quitar `spec.managed` **no borra el role**: CNPG deja de gestionarlo y pasa a la lista
+`not-managed`, exactamente como los cinco creados a mano. Aviso cosmético: CNPG **no limpia**
+`status.managedRolesStatus`, así que el role sigue apareciendo bajo `reconciled` indefinidamente
+aunque ya no se reconcilie nada. Mirar `spec.managed`, no ese status.
+
 Queda **una copia de `deal_tracker_prod` en este Postgres**, a propósito: `databaseReclaimPolicy: retain`
 hace que quitar el CRD `Database` no dropee nada, y sacar el role de `managed.roles` sólo lo deja
 `not-managed`. Es la red de seguridad del traslado. Borrarla —base, role y el Secret huérfano
