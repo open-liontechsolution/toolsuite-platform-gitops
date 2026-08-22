@@ -142,6 +142,15 @@ duplicated and pruned.
   `OutOfSync` until someone syncs it by hand (`argocd app sync cnpg-cluster-local-dev`, or
   `kubectl -n argocd patch app … -p '{"operation":{"sync":{}}}'`). Do not "fix" it by adding `automated`.
   `authentik-postgres-local-casa` does sync automatically — the two policies differ deliberately.
+  **`keycloak-local-dev` and `cnpg-operator` are manual too**, each for its own reason (realms reaching
+  the IdP unreviewed; `prune` on a CRD taking every `Cluster` of that kind with it) — both written out
+  in the `syncPolicy` comment of their Application. Auto-sync is the exception here, not the default.
+- **Applications are applied by hand and nothing reconciles the file against the live object.** There is
+  no app-of-apps, so a change made in the cluster and never brought down to git sits there silently until
+  someone re-applies the file — and then lands all at once. Two Applications diverged that way for months
+  (issue #65). Check with `scripts/argocd-drift.sh`. Do not compare them with a plain `diff`: the API
+  server strips zero-values on write (`allowEmpty: false`, `prune: false`, `group: ""`), so a raw
+  comparison flags 6 of the 8 Applications in false — the script normalises that first.
 - **Monitoring objects for CNPG are owned by the `k3s-local-apps-manifests` repo**, not this one. Its
   `prometheus/cnpg/podmonitor.yaml` declares the PodMonitor (ns `monitoring`, `namespaceSelector` over
   `data-dev` + `data-casa`) and `prometheus/prometheus/rules-cnpg.yaml` the alert rules. Keep

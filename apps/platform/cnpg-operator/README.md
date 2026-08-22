@@ -45,7 +45,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/<your-org>/toolsuite-platform-gitops
+    repoURL: https://github.com/open-liontechsolution/toolsuite-platform-gitops
     path: apps/platform/cnpg-operator
     targetRevision: main
     helm:
@@ -55,12 +55,33 @@ spec:
     server: https://kubernetes.default.svc
     namespace: cnpg-system
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
+    # sin `automated`, a proposito: ver "Sync Policy" mas abajo
     syncOptions:
       - CreateNamespace=true
 ```
+
+El fichero real es `argocd/operator.yaml`; este ejemplo es una copia recortada. Aplicalo con
+`kubectl apply -f apps/platform/cnpg-operator/argocd/operator.yaml`, no copiando de aqui.
+
+## Sync Policy
+
+**Esta Application NO lleva `automated`, y no es un olvido.** El chart trae las CRDs de CNPG, y
+`prune: true` sobre una CRD se lleva por delante todos los objetos de ese kind — o sea, los dos
+clusters de Postgres (`platform-postgres-dev` y `authentik-postgres-casa`) y con ellos las bases de
+las que dependen varias aplicaciones publicadas. No es un evento recuperable con un rollback del repo.
+
+Es el mismo razonamiento que ya lleva escrito `cnpg-cluster-local-dev`, que depende de este operador:
+si el cluster tiene ventana de revision manual, el operador que lo gobierna no puede tener menos.
+
+El sync se lanza a mano tras revisar el diff:
+
+```bash
+argocd app diff cnpg-operator --local apps/platform/cnpg-operator
+argocd app sync cnpg-operator
+```
+
+Que el fichero y el objeto vivo sigan coincidiendo lo comprueba `scripts/argocd-drift.sh`; nada lo
+reconcilia solo.
 
 ## Verification
 

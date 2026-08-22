@@ -9,7 +9,7 @@ spec:
   project: default
   
   source:
-    repoURL: https://github.com/<your-org>/toolsuite-platform-gitops
+    repoURL: https://github.com/open-liontechsolution/toolsuite-platform-gitops
     path: apps/platform/cnpg-operator
     targetRevision: main
     helm:
@@ -22,10 +22,24 @@ spec:
     namespace: cnpg-system
   
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-      allowEmpty: false
+    # SIN `automated`, a proposito. No es un olvido.
+    #
+    # Este chart trae las CRDs de CNPG, y `prune: true` sobre una CRD se lleva por
+    # delante todos los objetos de ese kind — o sea, los dos clusters de Postgres
+    # (`platform-postgres-dev` y `authentik-postgres-casa`) y con ellos las bases de
+    # las que dependen varias aplicaciones publicadas. No es un evento recuperable
+    # con un rollback del repo.
+    #
+    # Es ademas el mismo razonamiento que ya lleva escrito `cnpg-cluster-local-dev`,
+    # que depende de este operador: si el cluster tiene ventana de revision manual,
+    # el operador que lo gobierna no puede tener menos.
+    #
+    # Deployment order: este operador y sus CRDs tienen que existir ANTES de que
+    # sincronice ningun cluster CNPG.
+    #
+    # El sync se lanza a mano tras revisar el diff:
+    #   argocd app diff cnpg-operator --local apps/platform/cnpg-operator
+    #   argocd app sync cnpg-operator
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true

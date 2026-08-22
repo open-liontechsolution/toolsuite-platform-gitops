@@ -23,10 +23,25 @@ spec:
     namespace: security-dev
   
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-      allowEmpty: false
+    # SIN `automated`, a proposito. No es un olvido.
+    #
+    # Este chart despliega los realms de deal-tracker por keycloak-config-cli, y
+    # ahi viven el realm contra el que se autentica QA (`deal-tracker-dev`) y el
+    # de PRODUCCION (`deal-tracker-prod`). Un auto-sync con prune+selfHeal
+    # llevaria cualquier error de `realms/` al IdP sin que nadie mirase: un
+    # `webOrigins` mal puesto tumba el login entero, y ya paso una vez
+    # (deal-tracker#219). La ventana de revision manual es deliberada.
+    #
+    # La reconciliacion NO depende de que alguien sincronice: de eso se encarga el
+    # CronJob de config-cli de las 04:00. Esta razonado en README.md, seccion
+    # "Como se ejecuta" — si se cambia esto, ese parrafo entero deja de ser cierto.
+    #
+    # El sync se lanza a mano tras revisar el diff:
+    #   argocd app diff keycloak-local-dev --local apps/security/keycloak
+    #   argocd app sync keycloak-local-dev
+    # o, sin la CLI:
+    #   kubectl -n argocd patch app keycloak-local-dev --type merge \
+    #     -p '{"operation":{"sync":{}}}'
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
