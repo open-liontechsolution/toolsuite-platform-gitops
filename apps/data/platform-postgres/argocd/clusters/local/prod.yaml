@@ -1,0 +1,71 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-postgres-local-prod
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: tools
+
+  source:
+    repoURL: https://github.com/open-liontechsolution/toolsuite-platform-gitops
+    path: apps/data/platform-postgres
+    targetRevision: main
+    helm:
+      releaseName: platform-postgres-prod
+      valueFiles:
+        - values.yaml
+        - environments/local/prod.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: data-prod
+
+  syncPolicy:
+    # SIN `automated`, a proposito. No es un olvido, y es distinto de
+    # `authentik-postgres-local-casa`, que si lo tiene.
+    #
+    # Este cluster sostiene las DOS bases de produccion: el LOGIN (keycloak_prod) y los
+    # DATOS de la aplicacion (deal_tracker_prod). Un auto-sync con prune+selfHeal lleva
+    # cualquier error del repo directo a las dos sin que nadie lo mire, y con
+    # `instances: 1` un rollout no deseado es una caida, no una degradacion. Es el mismo
+    # criterio que `cnpg-cluster-local-dev`.
+    #
+    # El sync se lanza a mano tras revisar el diff:
+    #   argocd app sync platform-postgres-local-prod
+    # o, sin la CLI:
+    #   kubectl -n argocd patch app platform-postgres-local-prod --type merge \
+    #     -p '{"operation":{"sync":{"syncOptions":["CreateNamespace=true","ServerSideApply=true"]}}}'
+    #
+    # LAS syncOptions SE REPITEN AHI A PROPOSITO, aunque esten declaradas justo debajo:
+    # una operacion lanzada a mano NO hereda `spec.syncPolicy.syncOptions`. Argo
+    # sincroniza con las de la propia operacion, asi que un `{"sync":{}}` a secas las
+    # pierde LAS DOS y no lo dice. Con `CreateNamespace` perdido, el sync falla con
+    # `namespaces "..." not found`; con `ServerSideApply` perdido no falla nada — se
+    # aplica del otro modo y ya esta. Medido el 22/08/2026 desplegando la #62: la
+    # operacion quedo registrada como {"sync": {}} con las dos opciones en el spec.
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  ignoreDifferences:
+    # El operador escribe `/status` en los dos CRDs; sin esto la Application no se
+    # estabiliza nunca.
+    - group: postgresql.cnpg.io
+      kind: Cluster
+      jsonPointers:
+        - /status
+    # La de `Database` viene de apps/data/cnpg, donde esta anotado que el objeto salio
+    # Synced SIN ella (medido el 08-08-2026). Se replica igualmente porque el coste es
+    # cero y el dia que el operador escriba ahi no hay que averiguarlo otra vez.
+    - group: postgresql.cnpg.io
+      kind: Database
+      jsonPointers:
+        - /status

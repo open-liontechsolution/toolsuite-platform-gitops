@@ -1,0 +1,221 @@
+# platform-postgres - cluster CNPG GENERAL del tier de PRODUCCION (issue #71)
+# Namespace: data-prod
+# Deployment: k3s local con almacenamiento Longhorn
+#
+# Sustituye a `keycloak-postgres-prod`, que era el mismo cluster con otro nombre y un
+# solo inquilino. Aqui viven las DOS bases de produccion:
+#   keycloak_prod      - el IdP (llego con la #62), la crea el initdb
+#   deal_tracker_prod  - los datos de la aplicacion (llego con la #71 desde
+#                        platform-postgres-dev, ns data-dev), declarada abajo
+
+cluster:
+  fullnameOverride: platform-postgres-prod
+
+  cluster:
+    imageName: ghcr.io/cloudnative-pg/postgresql:16.4
+
+    # Una sola instancia, a proposito.
+    # Subir a 2 dejaria el segundo pod en Pending: la nodeAffinity de mas abajo exige
+    # worker AND performance=high y `worker4` es el unico worker con esa etiqueta. Ver
+    # la nota larga en apps/data/cnpg/environments/local/dev.yaml.
+    # La recuperacion de este cluster es por backup, no por failover.
+    instances: 1
+
+    # 20Gi, no los 10Gi que llevaba cuando solo alojaba el IdP. El que crece aqui es
+    # `deal_tracker_prod`: 289 MB medidos el 22/08/2026, de los cuales 110 MB son
+    # `variant` y 103 MB `price_history`, y el historico de precios solo suma —una
+    # pasada diaria de diez scrapers—. `keycloak_prod` son 15 MB y no crece con los
+    # datos de la aplicacion. Es el mismo tamano que tiene platform-postgres-dev, que
+    # con seis bases dentro va al 2%.
+    storage:
+      size: 20Gi
+      storageClass: longhorn
+    walStorage:
+      storageClass: longhorn
+      size: 1Gi
+
+    # MEDIDO, no copiado: estos son los mismos limites con los que platform-postgres-dev
+    # sirve hoy SEIS bases (dev, qa y la propia produccion) sin apretar. Este cluster se
+    # lleva una de esas seis mas el IdP, o sea estrictamente menos carga. Si algun dia
+    # entra un tercer inquilino, se mide antes de subirlos.
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+      limits:
+        cpu: "1"
+        memory: "2Gi"
+
+    # Node affinity: solo workers de alto rendimiento.
+    # Las dos expresiones van ANDed, asi que la instancia cae en un nodo que es worker
+    # AND performance=high (el control-plane master1 tambien lleva performance=high,
+    # por eso la etiqueta de worker es obligatoria para excluirlo).
+    affinity:
+      enablePodAntiAffinity: true
+      topologyKey: kubernetes.io/hostname
+      podAntiAffinityType: preferred
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: node-role.kubernetes.io/worker
+                  operator: In
+                  values:
+                    - "true"
+                - key: node.kubernetes.io/performance
+                  operator: In
+                  values:
+                    - high
+
+    additionalLabels:
+      app.kubernetes.io/part-of: data-platform
+      app.kubernetes.io/component: platform-db
+      environment: prod
+      deployment: local
+
+    # OJO CON LA RUTA: es `cluster.cluster.initdb`, NO `cluster.cluster.bootstrap.initdb`.
+    # El subchart arma el bloque `bootstrap:` el solo a partir de `initdb`, asi que un
+    # `bootstrap:` escrito a mano aqui NO SE LEE — Helm lo acepta, el render sale con los
+    # valores de otro sitio y no avisa nadie. Comprobado: forzando
+    # `cluster.cluster.bootstrap.initdb.database=ZZZ` el Cluster renderiza igual, y
+    # forzando `cluster.cluster.initdb.database=ZZZ` cambia. Ver #70.
+    #
+    # Que la base del initdb sea la del IdP y no una neutra es deliberado: sus
+    # credenciales ya estaban selladas dos veces cuando se hizo el traslado, y
+    # reaprovecharlas dejo el movimiento del Keycloak en un solo valor a re-sellar
+    # (`KC_DB_URL_HOST`). El porque largo, en el values.yaml base.
+    initdb:
+      database: keycloak_prod
+      owner: keycloak_prod
+      secret:
+        name: keycloak-postgres-app
+
+      # SIN ESTO KEYCLOAK NO ARRANCA. Su ConfigMap fija `KC_DB_SCHEMA: keycloak`, y
+      # Keycloak espera encontrar ese schema: no lo crea. Liquibase muere con
+      # `ERROR: schema "keycloak" does not exist` al intentar crear `databasechangelog`,
+      # y el pod entra en bucle de reinicio. Costo 9 reinicios al estrenar la #62.
+      #
+      # postInitApplicationSQL corre UNA VEZ, en el bootstrap y contra la base de la
+      # aplicacion. Anadirlo a un cluster ya arrancado no lo ejecuta: si hiciera falta
+      # cambiarlo, hay que recrear el cluster.
+      #
+      # Se queda aunque el traslado de la #71 restaure `keycloak_prod` desde un volcado
+      # que ya trae el schema: es lo que hace que reconstruir esta base desde cero
+      # reproduzca una que arranca.
+      postInitApplicationSQL:
+        - CREATE SCHEMA IF NOT EXISTS keycloak AUTHORIZATION keycloak_prod
+
+    # Role del segundo inquilino. `cluster.cluster.roles`, no `cluster.managed.roles`:
+    # el bloque `managed:` lo construye el subchart.
+    #
+    # `inherit` y `connectionLimit` son los DEFAULTS DEL API SERVER y aun asi van
+    # escritos a mano. Argo posee `spec.managed.roles` como lista ATOMICA, asi que lo
+    # que el operador anada dentro cuenta como diferencia y la Application se queda
+    # OutOfSync para siempre. Medido en la #55: sin estas dos lineas el sync sale
+    # Succeeded y el Cluster sigue OutOfSync.
+    roles:
+      - name: deal_tracker_prod
+        ensure: present
+        comment: "deal-tracker produccion (Liontech-Solution/deal-tracker#267)"
+        login: true
+        superuser: false
+        createdb: false
+        passwordSecret:
+          name: deal-tracker-prod-db
+        inherit: true
+        connectionLimit: -1
+
+    primaryUpdateStrategy: unsupervised
+
+    # Tuning para una instancia pequena. Sin cambios respecto a los otros dos clusters
+    # del repo: la carga que entra con deal_tracker_prod es una pasada diaria de
+    # scrapers, no concurrencia.
+    postgresql:
+      parameters:
+        max_connections: "100"
+        shared_buffers: "128MB"
+        effective_cache_size: "512MB"
+        maintenance_work_mem: "32MB"
+        work_mem: "1310kB"
+        checkpoint_completion_target: "0.9"
+        wal_buffers: "16MB"
+        default_statistics_target: "100"
+        random_page_cost: "1.1"
+        effective_io_concurrency: "200"
+        min_wal_size: "128MB"
+        max_wal_size: "512MB"
+
+  # Base del segundo inquilino, via el CRD `Database`. Hermana de `cluster.cluster`,
+  # NO dentro de el.
+  #
+  # EL NOMBRE DE LA BASE Y EL DEL ROLE SON CONTRATO con k3s-local-apps-manifests: van
+  # dentro del `DATABASE_URL` sellado de `deal-tracker/overlays/prod`. Cambiarlos aqui
+  # deja de validar alli.
+  #
+  # `retain` explicito aunque sea el default del CRD: con `delete`, borrar el objeto
+  # Database DROPea la base. El objeto se llamara `platform-postgres-prod-deal-tracker-prod`
+  # (el prefijo lo impone el subchart); lo que importa es `spec.name`.
+  databases:
+    - name: deal_tracker_prod
+      owner: deal_tracker_prod
+      databaseReclaimPolicy: retain
+
+  # Backup logico a MinIO. Forma completa en el values.yaml base.
+  # Va atado a la credencial S3 de mas abajo: con `backups.enabled` y sin Secret, el
+  # archivado de WAL falla y el cluster arranca igual — el fallo no se ve hasta el dia
+  # que hace falta el backup.
+  backups:
+    enabled: true
+
+# Credenciales del role `keycloak_prod` (la base del initdb). Los ciphertexts son los
+# MISMOS que usaba apps/data/keycloak-postgres y siguen siendo validos sin re-sellar:
+# el sellado va atado a namespace + nombre, y ninguno de los dos cambia (data-prod,
+# keycloak-postgres-app). El nombre del Secret conserva el prefijo `keycloak-` a
+# proposito: describe a su inquilino, no al cluster.
+#
+# El mismo plaintext del password esta sellado tambien contra `security-prod` en
+# apps/security/keycloak/environments/local/prod.yaml, bajo `KC_DB_PASSWORD`. Si se
+# rota, se rotan LOS DOS en el mismo commit.
+#
+# APAGADO MIENTRAS DURE LA TRANSICION, por el mismo motivo que `backupSecret` de mas
+# abajo: este SealedSecret lo declara todavia apps/data/keycloak-postgres y dos
+# Applications sobre el mismo objeto es un SharedResourceWarning en Argo. El Secret ya
+# existe en data-prod y el initdb solo lo lee, asi que el bootstrap funciona igual.
+# Se enciende en el commit que retira aquel chart, a la vez que `backupSecret`.
+sealedSecret:
+  enabled: false
+  name: keycloak-postgres-app
+  encryptedData:
+    username: "AgAgFhSYROWabwHjntQgaExQReei0ZzPZr8FFBiV9ZKru2mwIQyknYDOyMP5cTmSvtZfiLpjKBa1jZ+fS89bzI9/PBCfbL1YSKqTx+lOuIRNuuF7WYoCzJSnYBmUxu9ddyfWukDF9nSlSltScuz01tmdCm26xpB2FrRk0KortSVZqSBKBlre4ZfZriOQmaa5601Ekip3V3GSAOCaGRib3UAz14tILz8MaXajWyjAPNLjGbAiYzbQg0di8+DjGA9FMn3iRldlKbtlgnL9fMe35tJxh0rKFL074G7UwpMPkV30HpXabi/exn5xQ6z8CWbvrBlxmYKmTCGeVeQXdnx501I0WJJOqslvxgZpGk2/R2FnUkHCkOctXBAVauUcZnk91+N/62TXtuHg/yLr0WhRevRi73wuKOZVN2MAGYdPNyohLcQ5gFtTKtOYwa889OOfIV/ykwhj1ehZFbPkYp2CzU0aUiBpNdm0q+d6wOHLaCAhnnzPlAJiNzFZo1/PGKUzBMJjNTmghXwpfbtSow5I6qSHpfsM1mwVhkGZIiJxmJCLToHaPxIlj8NfOiTHAEX3nCy2U4Uc+85gFHcYzayyVCrNAoYtc0J9XZb1xFqYAEaNx+nzKxbVqCdl5MvEohHbHvfm4GkRNIjNZQN0lo7k7YMYB/vj6EoVNhwto9C+YBjzhfYs6WdHvvVNF1tPlcBTQQvRSQwm7ai3OOw1qQSm"
+    password: "AgBh4ywPH6kNhOndVU8hatW/Bpxm0J8kfbmHp7acfI8IJRAP0Q1AT70mDtTUJnPcyee6kiMH5S5/WzMIfSXnjmcd/481/RvWVfre86WfQR6mqCjvWKMo+h2szkLlvyWCt3/bnfJ0rQn3qGQ/f25QHgeLFbRIYov0lHY1B451JYcKnz3QwIu/HcyQHYb/LhnZ4eq2lcN2LLHhzIfKTfnHz4k/dy0ggu7OaeS9SnOTbnj+smGpemtrWbROe3orVC0hPQcZqJ9gpU6SuVH9vyMaDpl5DInKJWmBpZxhz2M6wyH8+/JbOmStcEmFagOWnndGZxB6+FPcnDBNj9WtLGSi8hHo3yxJdQieC4Fib7h6oPf7e5HtzQnf/Bn1J26xSCs84leJ0CmJzHG18z5T9IWr0/VoSQlneYvesnRo+G19p/rWGQvQ7FzXG0hXdLuoRgUYAimTGKTnelRvEDpuwoebgMPt3w70GJtKl9synG0Cw+FLqpgdNvGeiYLY13UyvNoY7Tgfb+LWfJ1vu6r5n9sR5wPlYDCNZnax+SKQPyFDlzWfKPNSHTCSaLnXyikNsya7QljZiUNWtWPvfLpDQLg994NhMDn+Fg8RbROOx4oD3hn9nK2IKz0JfFwyLPJxmBkTBe2/s8hv1EwfLSh3YxYwrfL87DYK/wpNf9P7oPNU3x/MlQPbOsS0feQiysIRH2XIn91gevKvQWQRyPfW793NbegVDzHAhlNCy4OQohhccMDA5Q=="
+
+# Credencial S3 del barmanObjectStore.
+#
+# APAGADO A PROPOSITO MIENTRAS DURE LA TRANSICION: el SealedSecret `cnpg-backup-s3-creds`
+# de `data-prod` lo posee todavia la Application `keycloak-postgres-local-prod`, y dos
+# Applications declarando el mismo objeto es un SharedResourceWarning en Argo. El Secret
+# ya existe en el namespace, asi que `backups.enabled: true` de arriba funciona igual:
+# CNPG solo lo lee.
+#
+# SE ENCIENDE EN EL MISMO COMMIT QUE RETIRA apps/data/keycloak-postgres, y hay que
+# sincronizar esta Application ANTES de borrar aquella: el SealedSecret es el dueno del
+# Secret, asi que si se va primero el viejo, el Secret desaparece con el.
+# Los ciphertexts ya estan puestos para que ese commit sea un solo `false` -> `true`.
+backupSecret:
+  enabled: false
+  name: cnpg-backup-s3-creds
+  encryptedData:
+    accessKeyId: "AgBJxC6d6F7B8/8gUJeDaSzh6Xgs4b+HZ3vohVFmLj7SFZ+GjxYTFy/SQAWewnMfcs9YAGqNP0YDtI9C2KFDsb4rCeuPY8wjVFYHS0nFtRiWRkrlNkQpuXSq1is9+XMKXROeSpX6u7fRKK60lphPLK48wg3dDUq2sbEgqyqCuL8ruV2JKLOGAOUaI9mWBPfSbcqPgnV3Gz3RpeJFNzlLDv2QNGxyWlzyzGxaYq3rLk4yDBPDUbu+2fLr23nUOsE7GD7Da+7TlsAD/d2A5R6NfW96yXcO9t23ziyJkjw9Qxb2GobI8ClPD7MHIftx68feqeKREh8MHSLWwAnl+FgKy39cOkJD8ZzUbQzSh/TKDGkI0o/otJ9bG59AigHUNz9OYpSu6P/Dg6REqP1FdYOqJYoEDo8qPaCGEcJUiuOJLGv/DyJujiicyA1eQG+TquuiyhBiMas2tiSMSTWQLWyv8njxwwdYqlXeCZqnjs2dos+BuyG29aupfBCqvCU0rmZFEa6XG4rQdln69YYmrgvgeOfGE/wsjISEHZFNF2RJtoc2Mb1tpZpO0Qzy+KZHR/zxwblW0b2jfnrG3Egwy52DwL9h0fkSBXqNP7nAL72OAWUKWqwttCD8q8Rrda+bdbiHmu2U9y8oq1ZZCD8nXjBTG8jxgYKJdesE/Ln0qxxSRJH8sM3lMRQ62eP+Sc+WoJ4ZkEa0+aHshxAOcQ95fA=="
+    secretAccessKey: "AgBVmK2gxaLmLwV2nwbQzpUZjKpO6P2eGWiGZPLmokPCvnHStBcYwhktTfekQKLR0+8VYULMB6w8vZfEl1YHbm5CA2L2Op2Y2VGHIeqVP1cLlN3EblH09H0rM8r2xQKGEmdAK2g0goh7JzkAcpc94M1mQb7989BHVgqbNrRFvX51ZkdSqn5i1vRz3Ooxy3L8rwW2baITT1Oj5ME6glKKb9P1F5GrxllhZBHUMu5ssiSYyOdvRv7bcGB9b2bDAp1en66765L8UgrHwEYorCQrNY+UAaoX75VGOh3Tj6bjvs4zkAVaoXryNe8ixoqJkjLixU0GelmmExGaxK+uTCryfRUmnXCKb9O8KVhxoKb0Xm6+rB/hfNQpWLCkbGgwruXfTxOkTpIgf1xOID4CDnOr86w04VYWzTdbuzQ+OnJZxGabEWP6ZYh/lzr7xS//7UC7AvlzzLenRdl/mjQA4EXlo5jxT45c5FA7HYcX9HcoOfMdDnokvtSuYx0+YssxHm4UFMDlFxefYxavgxMOr6+NodYREQGTK7r1j/nSmdZV306X6Z4JXXQlfMOX0YOGMi8XGtXLox/sG0Cy+UBq5w/IZQ9AvkLkzsmT2LV7Efg7Y5Ecs8ecszCM6G6mqAM+Ah9ZL6oniMiogdYreOk0XNXD2ZGEEZq87Dd83P2Yx5aFs/7UJWDSN12UH2vwdrGNjp0TO3y/uB8YT8lNgNDSJhkmHFKguhRSeO9GChxA87VOKaMJkywK8CeoWtLi"
+
+# Contrasena del role `deal_tracker_prod`. Es la MISMA que usaba en
+# platform-postgres-dev, re-sellada para este namespace (23/08/2026): reutilizarla en
+# vez de generar una nueva hace que la vuelta atras sea re-sellar el host viejo en
+# `DATABASE_URL` y nada mas.
+#
+# El plaintext de `username` es literalmente el nombre del role: CNPG lo compara, y si
+# no cuadra ignora la contrasena sin avisar.
+roleSecrets:
+  deal-tracker-prod-db:
+    username: "AgAs78oTs7x4zKYsSUj4WVr5TfG7hCEJFIOEDSKWVAM00bX83Lrzu1nros3tMK+PhwwgxifU4+In6ajBCDpVWvGCYWEnMcTibjJ/TDsN7DMwe6ihf/f2Op+3sr8nJMMa+BPd3Y+9/lm1ceG1eb8VXH1o3c8Y9cd85sWd2HqIm3fA26oHbAtUDLvnhJPqoaQL3IWmtdV3Qc3pqkQ0iXqLAew9dRgSHuqoB8sY9kMZEFOAewoxWMSL55kcQ9HdwiFOAvxGMPzrVvA+JlMO3Lj3gujr4zw4B2rsqY3O+a+GbhnT9HlfRfCXT1zJtiE40wF5FX+OSxTSI+koMEqgJLXsGKGogXsYLKa67p5ChUq6l8bJZ3tBgkVNHm+IFW2IbNCPxB2jo5R0ErUFrMZAC7pi8ZbwLnW8tr/NuwEIJCCBY90mcYrdCrbexzeak4ZTyC0hnOghjpRwsFryUq9lr4iKOZEGB8DjlIv02AppTaAIlKan6FBdrS3jfjWFl6PT2ec8i7uFw57ZLLxLH6vbMVOp2NpJ7mSLx+ohIbGAzgGSPko/mCKIGwPXHLnH9o+a5Akb7a2uSMb6yq2yMsAzIxpjY+hKvsl9vtxoPu0oWHG0wVTmrYxZVZG22910pc8ZYbFX9AVHJ0IWVrKRvYifR9D/esoOXFBAAearYAMcd+fYQM+5EwsVdrrUCx8WLoZpyEDvVT0QQMHUyE4kgnVRMZcxXSR6Gw=="
+    password: "AgBVGJJ+7u8Uxj/brjiK20sEomKGNdqacaGiVmHHUSq3Td2x+VlMRr3i9ba96rz2Nb0bu1bxeJSm94gX7jpW3LFopqjxqynF0HfLb+095XrBH45rQ31Bds3xx/kb+lJO3zKvVxsFJCTgr9oV6vz/ZKxS+Jj5WJiVBQxsEanMkOpx8Om021hAGEBmjG7zlR+T9CCsKnUEwDI0VYd67mTUi64hh5FicGKpRvtVcGWD8q+a3n6+zbqnSY1gtuwfsnk1VybGRyyWrXOwyT54CFqM8UEEaO5+wdGMT/XBeBk0mDmdGqiJpg8ciJQRKtuwMZ22qVW8/BHEuLIyPo8B5o7XYiHubteCh4WqBsT9cvPZpBzEHGgC+tN5mzp1GcH/3RPe2tqhZFY3C2vuHdAJgdJp7yjrlk03I5U3lhxj+UriTOwSqfIvLKz+gaYhZchllXJDaZdsR9ZX571qhljDxtnwCNZYnYbd6UMzjuXUqku0KxjeMfG7987Ks3vYwDGgt29fL84qqGuLAInqv1DzB4Da3mvkHcGOtcD0pIj6am6daO05fqUhLQlfNilOB8pIhZBR53PKRiGlT3LsCl4G6rUYL9pv7FANDuFdTDaAsr1ufr3poaHIyNZhFFbidI65kcvDV0V6FJ2tH3xEMT88X97i7YIm8/LKuCsoLdN2FFp8JcbdInaekyC5CTRMmBWmawjAWjETXLPkXM9kSiYXqIF8jc37WrZJF9D7MBpJMgm0fGw5u1wt9Mo9CInrHPDwjTpi9J8="
