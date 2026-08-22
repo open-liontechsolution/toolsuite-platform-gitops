@@ -109,13 +109,12 @@ cluster:
         max_wal_size: "512MB"
 
   # Backup logico a MinIO. Forma completa en el values.yaml base.
-  #
-  # APAGADO HASTA QUE ESTE EL CIPHERTEXT. Va atado a `backupSecret` de mas abajo: los
-  # dos flags se encienden a la vez y en el MISMO COMMIT que los ciphertexts. Con
-  # `backups.enabled` y sin Secret, el archivado de WAL falla y el cluster arranca
-  # igual — el fallo no se ve hasta que hace falta el backup.
+  # Va atado a `backupSecret` de mas abajo: los dos flags se encienden a la vez y en el
+  # MISMO COMMIT que los ciphertexts. Con `backups.enabled` y sin Secret, el archivado
+  # de WAL falla y el cluster arranca igual — el fallo no se ve hasta el dia que hace
+  # falta el backup.
   backups:
-    enabled: false
+    enabled: true
 
 # Credenciales del role `keycloak_prod`. El mismo plaintext del password esta sellado
 # tambien contra `security-prod` en apps/security/keycloak/environments/local/prod.yaml
@@ -133,19 +132,19 @@ sealedSecret:
 # mismo bucket sin pisarse porque CNPG cuelga cada uno de su propio serverName
 # (s3://cnpg-backup/keycloak-postgres-prod/...).
 #
-# PENDIENTE: es el MISMO plaintext que en los otros dos values, pero el ciphertext es
-# distinto y NO son intercambiables — este tiene que ir sellado contra `data-prod`.
+# Es el MISMO plaintext que en los otros dos values, pero el ciphertext es distinto y
+# NO son intercambiables: un SealedSecret va atado a namespace + nombre.
 #
-# NO SE SELLA A MANO DESDE EL SECRET VIVO: el bucket, la policy, el usuario y el
+# NO SE SELLA A MANO DESDE EL SECRET VIVO. El bucket, la policy, el usuario y el
 # plaintext los gobierna juanjocop/kxs-ansible (`roles/minio_creds`,
-# `playbooks/minio_creds.yml`, vault cifrado). Anadir `data-prod` a
-# `minio_seal_targets` de ese rol y ejecutar el playbook deja los dos ciphertexts en
-# su `out/cnpg-backup-s3-creds.yaml` para pegarlos aqui. Crear credenciales de MinIO
-# por fuera de ese camino es exactamente como `longhorn-backup` costo 49 dias de
-# backup roto en silencio.
+# `playbooks/minio_creds.yml`, vault cifrado); `data-prod` es un destino mas de su
+# `minio_seal_targets` desde kxs-ansible#57, y estos dos valores salen tal cual de su
+# `out/cnpg-backup-s3-creds.yaml`. Para ROTARLA se vuelve a ejecutar aquel playbook y
+# se re-pegan LOS TRES ficheros. Crear credenciales de MinIO por fuera de ese camino
+# es exactamente como `longhorn-backup` costo 49 dias de backup roto en silencio.
 backupSecret:
-  enabled: false
+  enabled: true
   name: cnpg-backup-s3-creds
   encryptedData:
-    accessKeyId: ""
-    secretAccessKey: ""
+    accessKeyId: "AgBJxC6d6F7B8/8gUJeDaSzh6Xgs4b+HZ3vohVFmLj7SFZ+GjxYTFy/SQAWewnMfcs9YAGqNP0YDtI9C2KFDsb4rCeuPY8wjVFYHS0nFtRiWRkrlNkQpuXSq1is9+XMKXROeSpX6u7fRKK60lphPLK48wg3dDUq2sbEgqyqCuL8ruV2JKLOGAOUaI9mWBPfSbcqPgnV3Gz3RpeJFNzlLDv2QNGxyWlzyzGxaYq3rLk4yDBPDUbu+2fLr23nUOsE7GD7Da+7TlsAD/d2A5R6NfW96yXcO9t23ziyJkjw9Qxb2GobI8ClPD7MHIftx68feqeKREh8MHSLWwAnl+FgKy39cOkJD8ZzUbQzSh/TKDGkI0o/otJ9bG59AigHUNz9OYpSu6P/Dg6REqP1FdYOqJYoEDo8qPaCGEcJUiuOJLGv/DyJujiicyA1eQG+TquuiyhBiMas2tiSMSTWQLWyv8njxwwdYqlXeCZqnjs2dos+BuyG29aupfBCqvCU0rmZFEa6XG4rQdln69YYmrgvgeOfGE/wsjISEHZFNF2RJtoc2Mb1tpZpO0Qzy+KZHR/zxwblW0b2jfnrG3Egwy52DwL9h0fkSBXqNP7nAL72OAWUKWqwttCD8q8Rrda+bdbiHmu2U9y8oq1ZZCD8nXjBTG8jxgYKJdesE/Ln0qxxSRJH8sM3lMRQ62eP+Sc+WoJ4ZkEa0+aHshxAOcQ95fA=="
+    secretAccessKey: "AgBVmK2gxaLmLwV2nwbQzpUZjKpO6P2eGWiGZPLmokPCvnHStBcYwhktTfekQKLR0+8VYULMB6w8vZfEl1YHbm5CA2L2Op2Y2VGHIeqVP1cLlN3EblH09H0rM8r2xQKGEmdAK2g0goh7JzkAcpc94M1mQb7989BHVgqbNrRFvX51ZkdSqn5i1vRz3Ooxy3L8rwW2baITT1Oj5ME6glKKb9P1F5GrxllhZBHUMu5ssiSYyOdvRv7bcGB9b2bDAp1en66765L8UgrHwEYorCQrNY+UAaoX75VGOh3Tj6bjvs4zkAVaoXryNe8ixoqJkjLixU0GelmmExGaxK+uTCryfRUmnXCKb9O8KVhxoKb0Xm6+rB/hfNQpWLCkbGgwruXfTxOkTpIgf1xOID4CDnOr86w04VYWzTdbuzQ+OnJZxGabEWP6ZYh/lzr7xS//7UC7AvlzzLenRdl/mjQA4EXlo5jxT45c5FA7HYcX9HcoOfMdDnokvtSuYx0+YssxHm4UFMDlFxefYxavgxMOr6+NodYREQGTK7r1j/nSmdZV306X6Z4JXXQlfMOX0YOGMi8XGtXLox/sG0Cy+UBq5w/IZQ9AvkLkzsmT2LV7Efg7Y5Ecs8ecszCM6G6mqAM+Ah9ZL6oniMiogdYreOk0XNXD2ZGEEZq87Dd83P2Yx5aFs/7UJWDSN12UH2vwdrGNjp0TO3y/uB8YT8lNgNDSJhkmHFKguhRSeO9GChxA87VOKaMJkywK8CeoWtLi"
