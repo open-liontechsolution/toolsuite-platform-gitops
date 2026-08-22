@@ -466,7 +466,19 @@ futbol que se llevan por delante **rangos enteros del plan gratuito de Cloudflar
 colateral a miles de sitios ajenos. Todos nuestros hosts caen ahi. Es intermitente y atado al
 horario de partido: vuelve solo cuando termina.
 
-**Como distinguirlo de una averia de verdad, en tres comprobaciones:**
+**Lo primero: preguntarlo, en vez de deducirlo.** Hay un comprobador publico con API JSON, y
+—esto es lo que lo hace util— **vive fuera de los rangos bloqueados** (`deinser.com` esta en
+46.232.251.33), asi que se puede consultar estando dentro del bloqueo:
+
+```bash
+curl -s "https://deinser.com/cloudflare/laliga/?domain=dealtracker.liontechsolution.com&json=1" \
+| python3 -c 'import json,sys; d=json.load(sys.stdin); print("bloqueado:", d["domain_blocked"], "| futbol activo:", d["futbol_blocking_active"])'
+```
+
+Devuelve tambien `domain_ips` y la lista entera de IPs bloqueadas. Para verlo de un vistazo:
+<https://deinser.com/cloudflare/laliga/> y <https://hayahora.futbol/>.
+
+**Si no hay red para preguntar, la huella se reconoce en tres comprobaciones:**
 
 ```bash
 # 1. Otros rangos de Cloudflare, ¿van? Si cloudflare.com responde, Cloudflare no esta caido.
@@ -494,6 +506,11 @@ No deshagas un despliegue por esto.
 Medido el 22/08/2026 a las 21:13 CEST: `104.21.79.172` y `172.67.146.160` sin TCP en 443 ni en 80,
 mientras `104.16.132.229` y `104.26.11.242` —tambien Cloudflare— respondian con normalidad, y
 `dealtracker.liontechsolution.com` devolvia 200 visto desde Linode.
+
+Y a las 23:03, ya con el comprobador: `domain_blocked: true` para los tres hosts, **746 IPs** en la
+lista y el bloqueo en curso desde las **17:00:01** de ese mismo dia. O sea: seis horas seguidas, no
+noventa minutos. La ventana es mucho mas ancha que el partido, que es justo lo que hace que parezca
+una averia.
 
 ### Cannot Connect to PostgreSQL
 
