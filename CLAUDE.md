@@ -178,8 +178,16 @@ duplicated and pruned.
   on the databases in `platform-postgres-dev`, so an auto-sync with `prune`/`selfHeal` would push any repo
   mistake straight at them. After merging a change under `apps/data/cnpg` the Application stays
   `OutOfSync` until someone syncs it by hand (`argocd app sync cnpg-cluster-local-dev`, or
-  `kubectl -n argocd patch app … -p '{"operation":{"sync":{}}}'`). Do not "fix" it by adding `automated`.
+  `kubectl -n argocd patch app … -p '{"operation":{"sync":{"syncOptions":["CreateNamespace=true","ServerSideApply=true"]}}}'`). Do not "fix" it by adding `automated`.
   `authentik-postgres-local-casa` does sync automatically — the two policies differ deliberately.
+- **A hand-triggered sync does not inherit the Application's `syncOptions`.** Argo syncs with the
+  options on the *operation*, so `-p '{"operation":{"sync":{}}}'` silently drops every option the
+  Application declares — repeat them in the patch, as every manual Application's `syncPolicy` comment
+  now shows. Losing `CreateNamespace=true` fails loudly (`namespaces "…" not found`); losing
+  `ServerSideApply=true` fails not at all, which is worse. `argocd app sync` and automated syncs are
+  unaffected: those build the operation from the spec. Corollary worth knowing: **no namespace in
+  this cluster was created by Argo** — none carries its tracking annotation. They were all made by
+  hand, which is why the dropped option went unnoticed until `data-prod` had to be created.
   **`keycloak-local-dev` and `cnpg-operator` are manual too**, each for its own reason (realms reaching
   the IdP unreviewed; `prune` on a CRD taking every `Cluster` of that kind with it) — both written out
   in the `syncPolicy` comment of their Application. Auto-sync is the exception here, not the default.

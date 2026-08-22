@@ -114,7 +114,7 @@ argocd app diff cnpg-cluster-local-dev --local apps/data/cnpg
 argocd app sync cnpg-cluster-local-dev
 
 # sin la CLI de argocd
-kubectl -n argocd patch app cnpg-cluster-local-dev --type merge -p '{"operation":{"sync":{}}}'
+kubectl -n argocd patch app cnpg-cluster-local-dev --type merge -p '{"operation":{"sync":{"syncOptions":["CreateNamespace=true","ServerSideApply=true"]}}}'
 ```
 
 `authentik-postgres-local-casa` **sí** va en automático (`apps/data/authentik-postgres`): es el auth de casa,

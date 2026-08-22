@@ -41,7 +41,15 @@ spec:
     #   argocd app sync keycloak-local-dev
     # o, sin la CLI:
     #   kubectl -n argocd patch app keycloak-local-dev --type merge \
-    #     -p '{"operation":{"sync":{}}}'
+    #     -p '{"operation":{"sync":{"syncOptions":["CreateNamespace=true","ServerSideApply=true"]}}}'
+    #
+    # LAS syncOptions SE REPITEN AHI A PROPOSITO, aunque esten declaradas justo debajo:
+    # una operacion lanzada a mano NO hereda `spec.syncPolicy.syncOptions`. Argo
+    # sincroniza con las de la propia operacion, asi que un `{"sync":{}}` a secas las
+    # pierde LAS DOS y no lo dice. Con `CreateNamespace` perdido, el sync falla con
+    # `namespaces "..." not found`; con `ServerSideApply` perdido no falla nada — se
+    # aplica del otro modo y ya esta. Medido el 22/08/2026 desplegando la #62: la
+    # operacion quedo registrada como {"sync": {}} con las dos opciones en el spec.
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
