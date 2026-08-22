@@ -86,11 +86,12 @@ helm template keycloak-prod apps/security/keycloak --namespace security-prod \
   -s templates/sealedsecret.yaml -s templates/realm-smtp-sealedsecret.yaml \
 | kubeseal --validate --controller-name sealed-secrets --controller-namespace kube-system
 
-# El de su base de datos
-helm template keycloak-postgres-prod apps/data/keycloak-postgres --namespace data-prod \
-  -f apps/data/keycloak-postgres/values.yaml \
-  -f apps/data/keycloak-postgres/environments/local/prod.yaml \
-  -s templates/sealedsecret.yaml \
+# Los tres de su base de datos (el cluster general de produccion)
+helm template platform-postgres-prod apps/data/platform-postgres --namespace data-prod \
+  -f apps/data/platform-postgres/values.yaml \
+  -f apps/data/platform-postgres/environments/local/prod.yaml \
+  -s templates/sealedsecret.yaml -s templates/backup-s3-sealedsecret.yaml \
+  -s templates/role-sealedsecret.yaml \
 | kubeseal --validate --controller-name sealed-secrets --controller-namespace kube-system
 ```
 

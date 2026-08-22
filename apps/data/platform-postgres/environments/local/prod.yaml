@@ -177,13 +177,11 @@ cluster:
 # apps/security/keycloak/environments/local/prod.yaml, bajo `KC_DB_PASSWORD`. Si se
 # rota, se rotan LOS DOS en el mismo commit.
 #
-# APAGADO MIENTRAS DURE LA TRANSICION, por el mismo motivo que `backupSecret` de mas
-# abajo: este SealedSecret lo declara todavia apps/data/keycloak-postgres y dos
-# Applications sobre el mismo objeto es un SharedResourceWarning en Argo. El Secret ya
-# existe en data-prod y el initdb solo lo lee, asi que el bootstrap funciona igual.
-# Se enciende en el commit que retira aquel chart, a la vez que `backupSecret`.
+# Encendido al retirar apps/data/keycloak-postgres (#71). Estuvo en `false` mientras
+# los dos charts convivieron: aquel declaraba este mismo objeto, y dos Applications
+# sobre el mismo recurso es un SharedResourceWarning en Argo.
 sealedSecret:
-  enabled: false
+  enabled: true
   name: keycloak-postgres-app
   encryptedData:
     username: "AgAgFhSYROWabwHjntQgaExQReei0ZzPZr8FFBiV9ZKru2mwIQyknYDOyMP5cTmSvtZfiLpjKBa1jZ+fS89bzI9/PBCfbL1YSKqTx+lOuIRNuuF7WYoCzJSnYBmUxu9ddyfWukDF9nSlSltScuz01tmdCm26xpB2FrRk0KortSVZqSBKBlre4ZfZriOQmaa5601Ekip3V3GSAOCaGRib3UAz14tILz8MaXajWyjAPNLjGbAiYzbQg0di8+DjGA9FMn3iRldlKbtlgnL9fMe35tJxh0rKFL074G7UwpMPkV30HpXabi/exn5xQ6z8CWbvrBlxmYKmTCGeVeQXdnx501I0WJJOqslvxgZpGk2/R2FnUkHCkOctXBAVauUcZnk91+N/62TXtuHg/yLr0WhRevRi73wuKOZVN2MAGYdPNyohLcQ5gFtTKtOYwa889OOfIV/ykwhj1ehZFbPkYp2CzU0aUiBpNdm0q+d6wOHLaCAhnnzPlAJiNzFZo1/PGKUzBMJjNTmghXwpfbtSow5I6qSHpfsM1mwVhkGZIiJxmJCLToHaPxIlj8NfOiTHAEX3nCy2U4Uc+85gFHcYzayyVCrNAoYtc0J9XZb1xFqYAEaNx+nzKxbVqCdl5MvEohHbHvfm4GkRNIjNZQN0lo7k7YMYB/vj6EoVNhwto9C+YBjzhfYs6WdHvvVNF1tPlcBTQQvRSQwm7ai3OOw1qQSm"
@@ -191,18 +189,14 @@ sealedSecret:
 
 # Credencial S3 del barmanObjectStore.
 #
-# APAGADO A PROPOSITO MIENTRAS DURE LA TRANSICION: el SealedSecret `cnpg-backup-s3-creds`
-# de `data-prod` lo posee todavia la Application `keycloak-postgres-local-prod`, y dos
-# Applications declarando el mismo objeto es un SharedResourceWarning en Argo. El Secret
-# ya existe en el namespace, asi que `backups.enabled: true` de arriba funciona igual:
-# CNPG solo lo lee.
+# Encendido al retirar apps/data/keycloak-postgres (#71), por el mismo motivo que
+# `sealedSecret` de arriba.
 #
-# SE ENCIENDE EN EL MISMO COMMIT QUE RETIRA apps/data/keycloak-postgres, y hay que
-# sincronizar esta Application ANTES de borrar aquella: el SealedSecret es el dueno del
-# Secret, asi que si se va primero el viejo, el Secret desaparece con el.
-# Los ciphertexts ya estan puestos para que ese commit sea un solo `false` -> `true`.
+# EL ORDEN IMPORTA Y NO SE VE: hay que sincronizar ESTA Application antes de borrar la
+# vieja. El SealedSecret es el dueño del Secret, asi que si se va primero el viejo, el
+# Secret se lo lleva por delante y el archivado de WAL empieza a fallar en silencio.
 backupSecret:
-  enabled: false
+  enabled: true
   name: cnpg-backup-s3-creds
   encryptedData:
     accessKeyId: "AgBJxC6d6F7B8/8gUJeDaSzh6Xgs4b+HZ3vohVFmLj7SFZ+GjxYTFy/SQAWewnMfcs9YAGqNP0YDtI9C2KFDsb4rCeuPY8wjVFYHS0nFtRiWRkrlNkQpuXSq1is9+XMKXROeSpX6u7fRKK60lphPLK48wg3dDUq2sbEgqyqCuL8ruV2JKLOGAOUaI9mWBPfSbcqPgnV3Gz3RpeJFNzlLDv2QNGxyWlzyzGxaYq3rLk4yDBPDUbu+2fLr23nUOsE7GD7Da+7TlsAD/d2A5R6NfW96yXcO9t23ziyJkjw9Qxb2GobI8ClPD7MHIftx68feqeKREh8MHSLWwAnl+FgKy39cOkJD8ZzUbQzSh/TKDGkI0o/otJ9bG59AigHUNz9OYpSu6P/Dg6REqP1FdYOqJYoEDo8qPaCGEcJUiuOJLGv/DyJujiicyA1eQG+TquuiyhBiMas2tiSMSTWQLWyv8njxwwdYqlXeCZqnjs2dos+BuyG29aupfBCqvCU0rmZFEa6XG4rQdln69YYmrgvgeOfGE/wsjISEHZFNF2RJtoc2Mb1tpZpO0Qzy+KZHR/zxwblW0b2jfnrG3Egwy52DwL9h0fkSBXqNP7nAL72OAWUKWqwttCD8q8Rrda+bdbiHmu2U9y8oq1ZZCD8nXjBTG8jxgYKJdesE/Ln0qxxSRJH8sM3lMRQ62eP+Sc+WoJ4ZkEa0+aHshxAOcQ95fA=="

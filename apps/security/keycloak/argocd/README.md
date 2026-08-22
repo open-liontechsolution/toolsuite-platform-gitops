@@ -31,7 +31,9 @@ kubectl apply -f clusters/local/dev.yaml
 
 ### Deploy to Local Prod
 
-`apps/data/keycloak-postgres` tiene que estar desplegado antes: esta Application no crea su base.
+`apps/data/platform-postgres` tiene que estar desplegado antes: esta Application no crea su base.
+(Era `apps/data/keycloak-postgres` hasta la #71, que lo renombro al convertirlo en el cluster
+general del tier de produccion. Ahora esa base convive alli con `deal_tracker_prod`.)
 
 ```bash
 kubectl apply -f clusters/local/prod.yaml

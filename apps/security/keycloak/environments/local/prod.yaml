@@ -164,7 +164,7 @@ keycloakx:
 # medio motivo de aislarla.
 #
 # KC_DB_PASSWORD lleva el MISMO plaintext que `sealedSecret.encryptedData.password` de
-# apps/data/keycloak-postgres/environments/local/prod.yaml, sellado una segunda vez contra
+# apps/data/platform-postgres/environments/local/prod.yaml, sellado una segunda vez contra
 # el otro namespace. Si se rota, se rotan los dos en el mismo commit: si divergen, Keycloak
 # no arranca y el error que da es de autenticacion contra Postgres.
 sealedSecret:

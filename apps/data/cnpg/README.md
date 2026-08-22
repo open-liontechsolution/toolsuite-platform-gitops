@@ -55,21 +55,34 @@ Lo que sigue es el inventario, y sobre todo qué parte de él está declarada.
 | Base | Role dueño | Quién la usa | ¿Declarada? |
 |---|---|---|---|
 | `platform` | `platform` | — | sí, `cluster.cluster.initdb` |
-| `deal_tracker_prod` | `deal_tracker_prod` | deal-tracker prod | sí, `cluster.databases` + `cluster.cluster.roles` |
 | `deal_tracker` | `deal_tracker` | deal-tracker dev | **no** |
 | `deal_tracker_qa` | `deal_tracker_qa` | deal-tracker qa | **no** |
 | `keycloak_dev` | `postgres` | Keycloak (`security-dev`) | **no** |
 | `tradingtool-dev` | `tradingtool-dev-user` | tradingtools dev | **no** |
 | `tradingtool-qa` | `tradingtool-qa-user` | tradingtools qa | **no** |
+| ~~`deal_tracker_prod`~~ | — | — | **se fue en la #71**, ver abajo |
 
 Las cinco marcadas se crearon a mano contra el secret superusuario y **no aparecen en ningún repositorio**.
 El backup físico devuelve los *datos*; el reparto de bases, dueños y roles no está escrito en ninguna
 parte, así que reconstruir este cluster desde cero es hoy recrear cinco bases a mano y acordarse de quién
 era dueño de cada una. Es el mismo agujero que los realms de Keycloak antes de la #49.
 
+**Y desde la #71 vuelve a ser el agujero entero.** `deal_tracker_prod` —la base de producción de
+deal-tracker— se trasladó al cluster general del tier de producción (`apps/data/platform-postgres`,
+release `platform-postgres-prod`, ns `data-prod`), porque compartir pod de `instances: 1` con dev y QA
+significaba que un rollout provocado por cualquiera de los otros inquilinos era una caída de producción.
+Era **la única** base declarada además de la del initdb, así que este cluster se queda otra vez sin
+ningún role en git y con cinco de sus seis bases sin escribir en ninguna parte.
+
+Queda **una copia de `deal_tracker_prod` en este Postgres**, a propósito: `databaseReclaimPolicy: retain`
+hace que quitar el CRD `Database` no dropee nada, y sacar el role de `managed.roles` sólo lo deja
+`not-managed`. Es la red de seguridad del traslado. Borrarla —base, role y el Secret huérfano
+`deal-tracker-prod-db`— es un paso a mano y deliberado, cuando haya confianza suficiente.
+
 Desde CNPG 1.25 hay mecanismo nativo y no hace falta montar nada: el CRD `Database`
 (`cluster.databases`) y `spec.managed.roles` (`cluster.cluster.roles`), los dos reconciliados por el
-operador. La #53 estrenó el patrón con `deal_tracker_prod`, que era nueva y no podía romper nada.
+operador. La #53 estrenó el patrón con `deal_tracker_prod`, que era nueva y no podía romper nada — y
+`apps/data/platform-postgres` es hoy el ejemplo vivo de las tres piezas juntas.
 
 **Adoptar las cinco va de una en una, con verificación entre medias**, y por un motivo concreto: declarar
 un role que ya existe con su `passwordSecret` hace que CNPG **le resetee la contraseña** a la del secret.
@@ -117,10 +130,10 @@ directamente en el values de entorno. No hay ficheros de Secret sueltos: el anti
 |---|---|---|---|
 | `platform-postgres-app` | `templates/sealedsecret.yaml` | `sealedSecret` | credenciales de la BD `platform` |
 | `cnpg-backup-s3-creds` | `templates/backup-s3-sealedsecret.yaml` | `backupSecret` | credencial S3 del backup a MinIO |
-| `deal-tracker-prod-db` | `templates/role-sealedsecret.yaml` | `roleSecrets` | contraseña del role `deal_tracker_prod` |
 
-`roleSecrets` va por **mapa** (clave = nombre del Secret) en vez de un bloque por secret como los otros
-dos, porque queda pendiente adoptar cinco roles más y eso serían cinco bloques casi iguales. Y su template
+`roleSecrets` está **vacío** desde la #71: su única entrada, `deal-tracker-prod-db`, se fue con el role.
+El template sigue aquí porque quedan cinco roles por adoptar. Va por **mapa** (clave = nombre del Secret)
+en vez de un bloque por secret como los otros dos, porque cinco roles serían cinco bloques casi iguales. Y su template
 emite `type: kubernetes.io/basic-auth`, no `Opaque`: es lo que CNPG exige para un `passwordSecret`, y
 además compara el `username` de dentro con el nombre del role. Si no cuadra, ignora la contraseña **sin
 avisar** — el Secret se desella, el Cluster sincroniza, y el role se queda sin poder entrar.
