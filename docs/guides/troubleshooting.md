@@ -478,6 +478,17 @@ curl -s "https://deinser.com/cloudflare/laliga/?domain=dealtracker.liontechsolut
 Devuelve tambien `domain_ips` y la lista entera de IPs bloqueadas. Para verlo de un vistazo:
 <https://deinser.com/cloudflare/laliga/> y <https://hayahora.futbol/>.
 
+**Y para ver la realidad en vez de deducirla**, hay un VPS en OVH (Francia) fuera del bloqueo:
+
+```bash
+./scripts/comprobar-desde-fuera.sh                                          # los hosts de siempre
+./scripts/comprobar-desde-fuera.sh --oidc keycloak.liontechsolution.com deal-tracker-prod
+```
+
+Ojo si lo haces a mano por SSH en vez de con el script: **sin user-agent de navegador Cloudflare
+devuelve 403** desde una IP de datacenter (`cf-mitigated: challenge`, en 70ms). Se lee como "el
+host esta caido" y es lo contrario. El script ya lo pone.
+
 **Si no hay red para preguntar, la huella se reconoce en tres comprobaciones:**
 
 ```bash
