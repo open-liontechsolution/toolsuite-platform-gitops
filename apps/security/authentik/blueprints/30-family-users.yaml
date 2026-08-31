@@ -49,8 +49,9 @@ entries:
       # `familia` es lo que da acceso a la despensa: el binding de 40-cocina-oidc.yaml apunta a
       # ese grupo, y es todo el modelo de autorización que la app tiene.
       #
-      # SIN `pc-sv1` a propósito: eso es acceso de login por SSSD a la VM de Bazzite, que es otra
-      # cosa y no hace falta para entrar en la app. Se añade el día que se quiera, no de paso.
+      # `pc-sv1` es otra cosa distinta —login por SSSD en la VM de Bazzite— y va aquí porque es
+      # lo que tienen el resto de miembros de la familia, no porque la app lo necesite.
       groups:
         - !Find [authentik_core.group, [name, familia]]
         - !Find [authentik_core.group, [name, adultos]]
+        - !Find [authentik_core.group, [name, pc-sv1]]
