@@ -25,7 +25,7 @@ metadata:
   name: cocina-oidc
   labels:
     blueprints.goauthentik.io/instantiate: "true"
-    blueprints.goauthentik.io/description: "cocina-familiar OIDC provider + application (rev1)"
+    blueprints.goauthentik.io/description: "cocina-familiar OIDC provider + application (rev2: grant_types)"
 entries:
   - id: cocina-provider
     model: authentik_providers_oauth2.oauth2provider
@@ -40,6 +40,17 @@ entries:
       # Fixed, not generated: it goes in the app's Deployment in clear text (it is not a secret,
       # it travels in every login URL), so it has to be predictable.
       client_id: cocina-familiar
+      # OBLIGATORIO, y el default es VACÍO — o sea, ningún grant permitido. Sin esto Authentik
+      # 2026.5 contesta al `authorize` con `invalid_request` / "The request is otherwise
+      # malformed", que no dice nada; el motivo real solo sale en el log del servidor, como
+      # "Invalid grant_type for provider". Y como el `authorize` sí redirige de vuelta al
+      # callback, desde la app se ve como un error genérico de estado.
+      #
+      # `refresh_token` va junto al otro a propósito: sin él el canje inicial funcionaría y la
+      # renovación no, así que el fallo aparecería a los diez minutos del primer login.
+      grant_types:
+        - authorization_code
+        - refresh_token
       # Exact match, not a regex. The app builds this from APP_PUBLIC_URL and it must agree
       # byte for byte or Authentik shows its own error page, outside our logs.
       redirect_uris:
