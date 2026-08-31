@@ -99,7 +99,22 @@ cluster:
     # en uno, en su propia issue. Y ojo: al irse `deal_tracker_prod`, este
     # cluster se queda SIN NINGUN role declarado, o sea que el reparto entero de
     # sus bases vuelve a estar fuera de git. Ver README.md.
-    roles: []
+    roles:
+      - name: cocina
+        ensure: present
+        comment: "cocina-familiar: la despensa de casa (juanjocop/cocina-familiar)"
+        login: true
+        superuser: false
+        createdb: false
+        passwordSecret:
+          name: cocina-familiar-db
+        # `inherit` y `connectionLimit` son los DEFAULTS DEL API SERVER y aun asi van
+        # escritos a mano, igual que en el cluster de prod: Argo posee
+        # `spec.managed.roles` como lista ATOMICA, asi que lo que el operador anada
+        # dentro cuenta como diferencia y la Application se queda OutOfSync para
+        # siempre. Sin estas dos lineas el sync sale Succeeded y el Cluster no.
+        inherit: true
+        connectionLimit: -1
 
     # Primary update strategy
     primaryUpdateStrategy: unsupervised
@@ -131,7 +146,18 @@ cluster:
   # keycloak_dev, tradingtool-dev, tradingtool-qa) se crearon a mano y no viven
   # en ningun repositorio: reconstruir este Postgres desde cero es hoy recrearlas
   # a mano y acordarse de quien era dueño de cada una. Ver README.md.
-  databases: []
+  databases:
+    - name: cocina
+      owner: cocina
+      # EL NOMBRE DE LA BASE Y EL DEL ROLE SON CONTRATO con k3s-local-apps-manifests:
+      # van dentro del `DATABASE_URL` sellado de `cocina-familiar/overlays/dev`.
+      # Cambiarlos aqui deja de validar alli, y el fallo aparece como un pod que no
+      # arranca, lejos de la causa.
+      #
+      # `retain` explicito aunque sea el default del CRD: con `delete`, borrar este
+      # objeto Database DROPEA la base entera — y aqui eso es el inventario de la
+      # despensa de casa.
+      databaseReclaimPolicy: retain
 
   # Backup logico a MinIO. Forma completa (endpoint, bucket, horario, retencion)
   # en el values.yaml base; aqui solo el interruptor.
@@ -191,4 +217,19 @@ backupSecret:
 # El Secret `deal-tracker-prod-db` que quede en `data-dev` es huerfano: no lo usa
 # ningun role declarado. Se puede borrar a mano cuando se retire la copia vieja
 # de la base.
-roleSecrets: {}
+# Contrasena del role `cocina`. Generada al azar el 31/08/2026 y sellada sin pasar
+# por disco: el texto plano no existe en ningun sitio, y no hace falta — el unico que
+# la usa es el `DATABASE_URL` de `cocina-familiar/overlays/dev`, que se sello con la
+# misma contrasena en la misma pasada.
+#
+# Rotarla obliga a resellar en LOS DOS REPOS Y EN ESTE ORDEN: primero aqui, que es
+# quien manda sobre el role, y despues el `DATABASE_URL` de alla. Al reves deja la
+# aplicacion fuera hasta que el operador reconcilie — medido el 08/08/2026 con prod
+# de deal-tracker, 40 minutos en CrashLoopBackOff.
+#
+# El plaintext de `username` es literalmente el nombre del role: CNPG lo compara, y
+# si no cuadra ignora la contrasena sin avisar.
+roleSecrets:
+  cocina-familiar-db:
+    username: "AgAuCwKhO/L+eVFwNr5f/GuU7sWrjofi4HCwyv5VOknlGaphNW70jE7BgJt+aq7q5xv/RHXHKMjGAGOE9a+Pd/3g2t2or/o0CpcVAOA/zQKul/4bDl1mFOXn42wglT0ZEMmnb7n5Trst4xLHK+q1Yl49i+Oazjr6GMrcs4bNiFU+k5qNTsN7ZBWmLpz64+mBSKoJFwkLNZDbnEun04Y2FFws2mxU7FTgCgGsLGBSAHesNJxe9nm0pqBSTj5mtuA1Dnq1z05zN7JtVYtRXfB4ZXBJjFwOrx6KJ9amurNqmr1eaHUwIyxZZj43jVRgOOsaIOfB5n4IGSAJGVFKm399Ovs4BWc151Sr+loO1ZVPVya4wzk19CsLfkwF5akUPmSojCCq0/EKAxh8D4YAQmsleVoezHDoFCkjt9e78oqqK90Obwle/r9+ssUjmft5ueCXDZqjY4t4QOVBkzb67nUMSp8lKtz1bUC9DB1N9PVNx67Jp0+jMCmfTGl/zhaBelHQ42epD9kGpkosIaBFqhIg6KQkUzabpy8TSbE7iTRqV6FlScNVjYW31EEls/cxyY4jAzNK/1FiegB6vJFBjjJfOAlo4zIv305hGUEchXbfwsw7kKP7ephddtPAn9SRq68C6CW+2k5758ykHPnaZ+uNIneqovyG7l0c4Cb4AeK5SgHjJTPCX8MU3J26vfAtEPr8lli0z/OzD5c="
+    password: "AgALwDtXNzcvsU1DLcmgzUindhtjcjwkQtXgwJt/hO3opgHHz4FDgxlYxj3VA6PQVTe1TLHeB7JuNqsbjyNKIE2jjBgSjmxGDt/TSUCF402HR5g3dGE/nxRYHZ0ldgijdqPQtjHUhgLOv8nlkQMhn+4MFri5HjPSdFVUc0MUmXWfPchtheA+g9iuS/epX78t3J+0VQuHs5pVIcYFQDZ12KaQ5qpT+hqWITDElZP3MV8Flhw6uhJSOKfkRyMQJWTWtplLLWvwwe+uqcpqRliiRa0xDXgcXX60MGxXpiYDC8cWdgEalqcGIIj3+Gr7JcDMO8N1SzkmC2uiyiX9XU+Z6id0/SUAvKErcuNyb6yuZzoxLDiLsss/kSDEZUTEquvwiJO5uoXJdhugd0Cq6MVS1RlU0cLCCutdLVnK3j+Lv7KivBK+uv26hm95mzlTOaygK+fcp7zI4uI0PdpiT/eSkVt228nj1144zwGcjeMz8J4/A4Wv00xanlgO45Jhd5r+1KGNCHpoR12xeOtcQfh/KxZpnQAF5rT2pAX/4FR348mHRERmJMpwVGnfKVZyQEbIXMS4EJROuKCdsd7zMiw2Qrof5EuEqPScQm06PIYYwL9B/Lge1ZfKRZmzHJmSrP8SEPEn0z/f9V6pEzGHfejJA9Lpzp037/+7cVv590exKcuqbxJbN1TjD3NNNB08BmFXppp8ucxVPTDxCaEzhGw7rjrYb9S10PArjI+1w4HoztCHjA=="

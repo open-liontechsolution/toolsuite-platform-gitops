@@ -1,0 +1,92 @@
+# OAuth2/OIDC provider + application for cocina-familiar (the pantry app).
+#
+# FIRST OIDC provider in this instance — everything before this was LDAP. If something here does
+# not apply cleanly, check the worker log: a blueprint that fails validation is skipped silently
+# from the UI's point of view.
+#
+# Public client with PKCE, NO client secret. The token exchange happens in the app's backend, which
+# keeps the refresh token in an HttpOnly first-party cookie and never hands it to the browser (see
+# services/web/src/auth/session-cookies.ts in juanjocop/cocina-familiar). A confidential client
+# would add a secret to seal in two repos and buy nothing: the backend already holds the only
+# credential that matters.
+#
+# Access is bound to the `familia` group from 00-family-groups.yaml. That binding IS the
+# authorisation: the app itself has no roles, which is right for five people in one house — but it
+# means removing someone from `familia` is the only way to revoke access.
+#
+# Post-apply manual step: none for secrets. But the app is published through the shared
+# `k3s-nonprod` Cloudflare tunnel, and Authentik has to be reachable from the same place or the
+# login cannot complete from outside the house — the redirect would point at authentik.casa.lan,
+# which only resolves on the LAN. Two Public Hostnames in Zero Trust:
+#   cocina.liontechsolution.com    -> cocina-familiar-web.cocina-familiar-dev.svc.cluster.local:80
+#   auth-casa.liontechsolution.com -> authentik-casa-server.security-casa.svc.cluster.local:80
+version: 1
+metadata:
+  name: cocina-oidc
+  labels:
+    blueprints.goauthentik.io/instantiate: "true"
+    blueprints.goauthentik.io/description: "cocina-familiar OIDC provider + application (rev1)"
+entries:
+  - id: cocina-provider
+    model: authentik_providers_oauth2.oauth2provider
+    identifiers:
+      name: cocina-familiar
+    attrs:
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      # `public` = no client secret; PKCE S256 is what proves the exchange comes from whoever
+      # started the flow. The app sends code_challenge_method=S256 always.
+      client_type: public
+      # Fixed, not generated: it goes in the app's Deployment in clear text (it is not a secret,
+      # it travels in every login URL), so it has to be predictable.
+      client_id: cocina-familiar
+      # Exact match, not a regex. The app builds this from APP_PUBLIC_URL and it must agree
+      # byte for byte or Authentik shows its own error page, outside our logs.
+      redirect_uris:
+        - matching_mode: strict
+          url: https://cocina.liontechsolution.com/api/auth/callback
+      # 10 minutes of access token. The SPA renews it from the backend before it expires, and a
+      # short window limits what a leaked access token is worth — the refresh token is the one
+      # that lasts, and that one never reaches the browser.
+      access_code_validity: minutes=1
+      access_token_validity: minutes=10
+      # 30 days, matching the cookie's max age in the app. This is what lets the app be opened
+      # from the phone's home screen without typing a password every time.
+      refresh_token_validity: days=30
+      sub_mode: hashed_user_id
+      include_claims_in_id_token: true
+      property_mappings:
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, openid]]
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, profile]]
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, email]]
+        # `offline_access` is what makes Authentik issue a refresh token at all. Without it the
+        # token endpoint answers 200 with no refresh_token and the app logs
+        # "el proveedor devolvió 200 sin tokens" on every login.
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, offline_access]]
+      signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
+
+  - id: cocina-app
+    model: authentik_core.application
+    identifiers:
+      slug: cocina
+    attrs:
+      name: Despensa de casa
+      # The slug above is what lands inside the issuer URL that the app is configured with:
+      #   https://auth-casa.liontechsolution.com/application/o/cocina/
+      # Renaming it silently breaks OIDC_ISSUER_URL in the app's Deployment.
+      provider: !Find [authentik_providers_oauth2.oauth2provider, [name, cocina-familiar]]
+      meta_description: Qué hay en la despensa, marcado desde el móvil.
+      meta_publisher: casa
+      # Hidden from the user portal's launcher: this app is opened from the phone's home screen,
+      # not from Authentik.
+      open_in_new_tab: false
+      policy_engine_mode: any
+
+  # Only `familia` gets in. This binding is the whole authorisation model of the app.
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !Find [authentik_core.application, [slug, cocina]]
+      group: !Find [authentik_core.group, [name, familia]]
+      order: 0
+    attrs:
+      enabled: true
