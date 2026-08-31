@@ -34,3 +34,23 @@ entries:
         - !Find [authentik_core.group, [name, familia]]
         - !Find [authentik_core.group, [name, adultos]]
         - !Find [authentik_core.group, [name, pc-sv1]]
+
+  - model: authentik_core.user
+    identifiers:
+      username: juanjocop
+    attrs:
+      # `name` es lo que la app de la despensa pinta en el historial ("Juanjo marcó que faltan
+      # lentejas"): el scope `profile` de Authentik mapea `given_name` a este campo, y
+      # `nombreVisible()` en cocina-familiar lo prefiere sobre el username.
+      name: Juanjo
+      type: internal
+      path: users
+      is_active: true
+      # `familia` es lo que da acceso a la despensa: el binding de 40-cocina-oidc.yaml apunta a
+      # ese grupo, y es todo el modelo de autorización que la app tiene.
+      #
+      # SIN `pc-sv1` a propósito: eso es acceso de login por SSSD a la VM de Bazzite, que es otra
+      # cosa y no hace falta para entrar en la app. Se añade el día que se quiera, no de paso.
+      groups:
+        - !Find [authentik_core.group, [name, familia]]
+        - !Find [authentik_core.group, [name, adultos]]
