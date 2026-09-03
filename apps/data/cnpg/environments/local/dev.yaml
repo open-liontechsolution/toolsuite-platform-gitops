@@ -116,6 +116,37 @@ cluster:
         inherit: true
         connectionLimit: -1
 
+      # Los dos entornos de pruebas de helit (juanjocop/cocina-familiar#17). Comparten Postgres
+      # con `cocina`, que es la despensa de verdad, y no pasa nada: son roles distintos con bases
+      # distintas. Lo que NO comparten es la contrasena — un token de pruebas que abriera la
+      # despensa de casa seria justo lo que estos entornos existen para evitar.
+      - name: helit_dev
+        ensure: present
+        comment: "helit dev: entorno desechable, datos falsos (juanjocop/cocina-familiar#17)"
+        login: true
+        superuser: false
+        createdb: false
+        passwordSecret:
+          name: helit-dev-db
+        # Mismo motivo que en `cocina`: `spec.managed.roles` es una lista ATOMICA, asi que sin
+        # estas dos lineas el operador anade los defaults, eso cuenta como diferencia, y la
+        # Application se queda OutOfSync para siempre con el sync en Succeeded.
+        inherit: true
+        connectionLimit: -1
+      - name: helit_qa
+        ensure: present
+        comment: "helit qa: la puerta a produccion, datos falsos y auth encendida (juanjocop/cocina-familiar#17)"
+        login: true
+        superuser: false
+        createdb: false
+        passwordSecret:
+          name: helit-qa-db
+        # Mismo motivo que en `cocina`: `spec.managed.roles` es una lista ATOMICA, asi que sin
+        # estas dos lineas el operador anade los defaults, eso cuenta como diferencia, y la
+        # Application se queda OutOfSync para siempre con el sync en Succeeded.
+        inherit: true
+        connectionLimit: -1
+
     # Primary update strategy
     primaryUpdateStrategy: unsupervised
     
@@ -157,6 +188,19 @@ cluster:
       # `retain` explicito aunque sea el default del CRD: con `delete`, borrar este
       # objeto Database DROPEA la base entera — y aqui eso es el inventario de la
       # despensa de casa.
+      databaseReclaimPolicy: retain
+
+    # Las dos de helit. Mismo contrato que arriba: el nombre de la base y el del role viajan
+    # dentro del `DATABASE_URL` sellado de `helit/overlays/{dev,qa}` en k3s-local-apps-manifests,
+    # asi que cambiarlos aqui se ve alli como un pod que no arranca, lejos de la causa.
+    - name: helit_dev
+      owner: helit_dev
+      # `retain` explicito aunque sea el default del CRD, igual que en `cocina`. Aqui no hay
+      # inventario de nadie, pero el dia que se retire este entorno conviene que borrar el objeto
+      # `Database` no dropee la base sin avisar.
+      databaseReclaimPolicy: retain
+    - name: helit_qa
+      owner: helit_qa
       databaseReclaimPolicy: retain
 
   # Backup logico a MinIO. Forma completa (endpoint, bucket, horario, retencion)
@@ -233,3 +277,16 @@ roleSecrets:
   cocina-familiar-db:
     username: "AgAuCwKhO/L+eVFwNr5f/GuU7sWrjofi4HCwyv5VOknlGaphNW70jE7BgJt+aq7q5xv/RHXHKMjGAGOE9a+Pd/3g2t2or/o0CpcVAOA/zQKul/4bDl1mFOXn42wglT0ZEMmnb7n5Trst4xLHK+q1Yl49i+Oazjr6GMrcs4bNiFU+k5qNTsN7ZBWmLpz64+mBSKoJFwkLNZDbnEun04Y2FFws2mxU7FTgCgGsLGBSAHesNJxe9nm0pqBSTj5mtuA1Dnq1z05zN7JtVYtRXfB4ZXBJjFwOrx6KJ9amurNqmr1eaHUwIyxZZj43jVRgOOsaIOfB5n4IGSAJGVFKm399Ovs4BWc151Sr+loO1ZVPVya4wzk19CsLfkwF5akUPmSojCCq0/EKAxh8D4YAQmsleVoezHDoFCkjt9e78oqqK90Obwle/r9+ssUjmft5ueCXDZqjY4t4QOVBkzb67nUMSp8lKtz1bUC9DB1N9PVNx67Jp0+jMCmfTGl/zhaBelHQ42epD9kGpkosIaBFqhIg6KQkUzabpy8TSbE7iTRqV6FlScNVjYW31EEls/cxyY4jAzNK/1FiegB6vJFBjjJfOAlo4zIv305hGUEchXbfwsw7kKP7ephddtPAn9SRq68C6CW+2k5758ykHPnaZ+uNIneqovyG7l0c4Cb4AeK5SgHjJTPCX8MU3J26vfAtEPr8lli0z/OzD5c="
     password: "AgALwDtXNzcvsU1DLcmgzUindhtjcjwkQtXgwJt/hO3opgHHz4FDgxlYxj3VA6PQVTe1TLHeB7JuNqsbjyNKIE2jjBgSjmxGDt/TSUCF402HR5g3dGE/nxRYHZ0ldgijdqPQtjHUhgLOv8nlkQMhn+4MFri5HjPSdFVUc0MUmXWfPchtheA+g9iuS/epX78t3J+0VQuHs5pVIcYFQDZ12KaQ5qpT+hqWITDElZP3MV8Flhw6uhJSOKfkRyMQJWTWtplLLWvwwe+uqcpqRliiRa0xDXgcXX60MGxXpiYDC8cWdgEalqcGIIj3+Gr7JcDMO8N1SzkmC2uiyiX9XU+Z6id0/SUAvKErcuNyb6yuZzoxLDiLsss/kSDEZUTEquvwiJO5uoXJdhugd0Cq6MVS1RlU0cLCCutdLVnK3j+Lv7KivBK+uv26hm95mzlTOaygK+fcp7zI4uI0PdpiT/eSkVt228nj1144zwGcjeMz8J4/A4Wv00xanlgO45Jhd5r+1KGNCHpoR12xeOtcQfh/KxZpnQAF5rT2pAX/4FR348mHRERmJMpwVGnfKVZyQEbIXMS4EJROuKCdsd7zMiw2Qrof5EuEqPScQm06PIYYwL9B/Lge1ZfKRZmzHJmSrP8SEPEn0z/f9V6pEzGHfejJA9Lpzp037/+7cVv590exKcuqbxJbN1TjD3NNNB08BmFXppp8ucxVPTDxCaEzhGw7rjrYb9S10PArjI+1w4HoztCHjA=="
+
+  # Contrasenas de los roles `helit_dev` y `helit_qa`. Generadas al azar el 03/09/2026 y selladas
+  # sin pasar por disco, en la MISMA pasada que los `DATABASE_URL` de `helit/overlays/{dev,qa}`
+  # en k3s-local-apps-manifests: el texto plano no existe en ningun sitio, y no hace falta.
+  #
+  # Rotarlas obliga a resellar en LOS DOS REPOS Y EN ESTE ORDEN, igual que la de `cocina`:
+  # primero aqui, que es quien manda sobre el role, y despues el `DATABASE_URL` de alla.
+  helit-dev-db:
+    username: "AgAw3Wi1GauzH+88MZ3zRJ7I4pGq+KyZqM2xBKwezUlVV16buFPb4wfiUPePJ1mM1TazJVWgkeVhyYHZ2/ekNj6/uF5npH7pXxpIqz9gxrPwoCsykfM8BpN7n/x5TiT23jkOvKa2QCuroD/R2VR/hXY8QWXVKoUAANeaJ4xXvHjsimJHbDhNQb+yb4beWSvUkW+nIs19aWSgztSbt0dtiQsqVUw3yL5FWLVhnWIBPr5zfL3WtbjnU59wY1UMgpDiMoI4nyEpkTtEbacmIlhHHl32TmnAvwzXdDR90hNYjxTc/b6tNbgsZWqHiXMRWhny1HMpCWD7dZ5apGdoBB1XqJgFmUNzGgUBoRarWjJPGLTDFdyitnhXb2J37FvJXF8D/6JlsVkqCXmTpBzxTvDUjfny6a78CWK7qjJqk1rcNf0WOtcvzcRlTfcjen3kOVZolxCHXX2cR1f0bViOU1ITmDwMkKxOr3e+mb0vX0Ab0qF3PcfZzWHPm67vofAFFr0k14hYW97u8wjso2wayYkuy695cbxY6bZ/Uz+XasV4yUznwMWWz3voONgl3DPAPKUevZdTve2ALYhvKPwPjzfbVAZK80xEDGIAIm6hJfeFPDBuaKzKVoAqbwcqsHfdydbt/wS57wJNoEDzYNkDY4Pz4a9YHYyItluD5p4ZGxPztFRFxc+L7ELJMD34saOhwLgl2w3Gy1FbAZf1LWw="
+    password: "AgBbCmuhdpwDScdsiHmBUbUfMqaAX7dWZ2ZrHyq5ctU7aglMLkrpwwyD6dzbGov4Ysfm4z17wufZkw8gwOHuSFFfHN/MIegmCszvT/eIyV8BPQ1FAcqhvSxbwjaP+qEW7rv+8iFVKF7TNEJj2LQzI5Y9yvwyW0Cn6Pc8dmglXYItroM5NkQFrVhy7awwQbmzibDgbCwxTbBfF5euKwe9JHdVI9w4MBru9UpvC4lBvIj5V8vJXTRCkRTe4OONCOQklrcrQ9wo6PYUb9mTV3TirgS1oxZpox0eHLQliqiHuYTABmEupzfflZ3AyfQSJL+SQYAOQ8v7olEJuutYS1UfbTvx4oyECLIIuBuwEzLrXbgoYfTx69mAnfw1nFCkl6DjNylaprGjP4HS56wYzF4VbVK1UGjt5L293qgqEOaVSMc746j3h/3DANRdtwzAt37BIkfVIw60OXInQQd5OHUIPF0VJc5Co0wjNTx4zXbM9sMWKNdN0L1e8lhBvyKhfX78w59rUL99fqYOaLSIMc7f0sfnfkBbe+p/oRMVrvNNMFyF4JtLGD4hP+X4qSdJ7cATejnxU8M0YoOm/vNgR09X/iyvgWUw2SPwMm49mwC6WUA8DuOz69yNGqIzSMuostP4MhNjOAkqduWrtIdyIvMLKzrh/YlVgoxSJ0M1OSQk2IO9rQeA4AraS+ICGcup0PBiyGrukOoarn9bFE28+9aShxBz0E0snfK3vjMFQwVHhckeeA=="
+  helit-qa-db:
+    username: "AgAPWF4GW9nkTRMZV3KZTmKug+5rF6C4uPSiqZT6njcSSQ8LlRB4BkEvvIP6Eokbrauah52LqcpXhAjNOFhyA7Zb3w4kQt8g6sVliRvPZ6GuRUxXEZXfQOdkJT+dqnCe/pXeYiGPq8gWOq7Jtc+pplHZ8Ve1W3d4nIlYG/DuT5de3g4yyYPJReHQnCLHmgSBd5u3q4QtewdKGp0pfQ9htVyCyZ1EFn/Qdc1HBv2SNLSzwTLFcHZDwxktGJ+fMn3T83F+S96idxOyOtKoJAHVq6169HOtiHNFZ0wItuIMF1RIGRokhtxcYrFB3Bsljk+F9i/UjqHlh1ePxtP9Vo9l4aOWrjsXmp1IBypNivNjgBiAqyEBi+joZPzJafWbB8mykkCE3IkMDkr5kAI9jWLa09oKSvNfN/llOUA4pjBEhfE5zIozJTKwNTnIfHVOMMr42QLKezv7UXa1izjS6jrlIY4Xv7oZkxVKSoN4db4RLt1H3dXRokL21YYh6VuTVFAzVaeeW2iht7DgKcOdQZm/WHdEifKNkK2TGbUi8yN6HZxrPRnPpvR3/4Q8ZZEIAUxKPObx4BFAFevJQE8ZDXYObREOVmHCq9nr7Vmg6jXGX6eGp4W4a4Jg/iL3OzspLSfTIld9efrI4zxmAIMDiePP1Fbjd4Wm6wil/PaF4Sa0lmiAc6ey6UFfbVscZFDIELneJDniiC40Fo7jtQ=="
+    password: "AgCR6wpdaWx+0NeSBcuVHWTaRYT32nt7qTaiypaTNMG9p5//Suknp0/Jph5cdw+S74XOYVtcSN5mkoLp765LVfT4/QLfy92L7LH+965SxqoQUfvtGSeOU3+AC37lw58aFn9++PRk0+Vi/MW5uChmkwYvd+eJndLwCaV5WRUY/I6FZRXquxpbqSvCCTt1xUzot4g3O3Nm9263eafA0q02LG1btmNn4vv25bCWsi7bOmFg2tbBCBCtQPB6SCcPH3ier0HBw0xCiXNJ6NGnTxh31EVrBK5YXFutK57GfMAnQwF8NdD7xnUaGMmg8/4P4Gb0BdW2lMy73wgIVDS6DCSO3d+ItMCTn+Mp4b/w0v/haGARDLWyv1YhFWUxgZsfAeZlDTaqMPTrekA/bhwqdfgjlHOOG5tuVckqGInnJziQKT0vO5kXPZiQVHbDvBQqSzAQ+BzLEb9XsQudIZTozk80M2XvNlyqEWqLCfAFPpKWsjHO9OzfOQS5JfZjBk5GrYSuUjcI/G+/Q/oxycdaMWcCW7pk/0pJRYbCkSMRZWJR6Pv30J9AENI1w5ENcMXpqEgRkBMctgLgNzaP8LqJDiv6/pcavE2kqKGEwGGoZI+dhRFbA3L5TjCMtLw2d4dg4754WCG4xHooFvZAwz0K1v+KjMuywLw0YZb9iP78ivpnXhSuUSZZTkxym3jpwaPCWdSSF8LHyKtU2kp2m0s3vUne6+irzMgTMKc1jN4aqF55OqqSPQ=="
