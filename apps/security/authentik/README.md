@@ -110,6 +110,54 @@ stores (kxs-ansible).
 OIDC + SAML Application/Provider blueprints for ChromeOS/Android. The host-level consumers
 (Bazzite/SSSD, NFS home roaming, parental controls) live in **`kxs-ansible`** (#23), not here.
 
+## Passwords: onboarding somebody, and recovering an account
+
+**Users created by `30-family-users.yaml` are born unable to log in.** Django marks their password
+as unusable with a leading `!`, and the blueprint cannot set one — that is not an oversight,
+blueprints carry no credentials. So every new person needs one manual gesture before they can enter
+anything. `natalia` sat unusable from the day she was created until somebody noticed
+(juanjocop/cocina-familiar#6).
+
+### Recovering an account (preferred)
+
+**Admin UI → Directory → Users → *(user)* → ⋯ → Create recovery link**, then send the link. The
+person sets their own password; nobody has to know it or say it out loud.
+
+This needs `brand.flow_recovery`, which `50-recovery-flow.yaml` assigns on both brands. Before that
+file existed the button had nothing to point at.
+
+### Fallback, without the admin UI
+
+```bash
+kubectl -n security-casa exec deploy/authentik-casa-worker -c worker -- \
+  ak create_recovery_key 60 <username>
+```
+
+Two things about it that are easy to misread:
+
+- **It prints a RELATIVE path** (`/recovery/use-token/<key>/`), not a URL. Prepend the host —
+  `https://authentik.casa.lan` on the LAN, `https://auth-casa.liontechsolution.com` from outside.
+  A path pasted as-is looks like a broken link and it is not.
+- **It does not use the recovery flow at all.** It mints a token with `INTENT_RECOVERY` and the link
+  logs the user straight in (`authentik/recovery/views.py`), landing them on `/if/user/` where they
+  change the password themselves. It works with or without `50-recovery-flow.yaml`.
+
+Last resort, when you want to set the password yourself (interactive, asks twice):
+
+```bash
+kubectl -n security-casa exec -it deploy/authentik-casa-worker -c worker -- \
+  ak changepassword <username>
+```
+
+### What is deliberately NOT enabled
+
+There is **no "Forgot password?" on the login page**, and turning it on is not a one-liner. That
+link comes from `IdentificationStage.recovery_flow` on `default-authentication-identification`,
+which stays null on purpose: this cluster has no SMTP and no `email` attribute on any user, so a
+self-service flow could only "verify" somebody by asking for a username — account takeover with
+extra steps. Self-service needs mail configured first, the same way Keycloak got it (see
+`docs/KEYCLOAK_USERS.md`).
+
 ## Troubleshooting: server 0/1 with `signal: bus error`
 
 If `authentik-casa-server` restarts forever and the logs show `gunicorn process died`
