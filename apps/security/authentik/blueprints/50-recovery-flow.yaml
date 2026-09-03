@@ -1,0 +1,109 @@
+# Password recovery flow, wired to the brands but NOT to the login screen (juanjocop/cocina-familiar#6).
+#
+# WHY THIS EXISTS
+#
+# Users created by 30-family-users.yaml are born with an unusable password: Django marks it with a
+# leading `!` and the blueprint cannot set one — that is not an oversight, blueprints do not carry
+# credentials. `natalia` sat like that from the day she was created and could not log in anywhere.
+# Every new person in the house lands in the same hole, and getting out of it meant an administrator
+# running `ak changepassword` over kubectl and then telling somebody their own password out loud.
+#
+# WHAT THIS CHANGES, AND WHAT IT DELIBERATELY DOES NOT
+#
+# Authentik 2026.5 ships NO recovery flow of its own (there is no flow-recovery*.yaml under
+# /blueprints/default/), so `brand.flow_recovery` is null and the admin UI's "Create recovery link"
+# button has nothing to point at. This file creates that flow and assigns it to both brands, which
+# turns the button on. The person then sets their OWN password; nobody has to know it.
+#
+# It does NOT touch `IdentificationStage.recovery_flow`, and that is the whole safety argument.
+# Those two fields are different things:
+#
+#   brand.flow_recovery                  -> what the ADMIN's "Create recovery link" builds a URL to
+#   IdentificationStage.recovery_flow    -> what puts "Forgot password?" on the LOGIN page
+#
+# The second one stays null. There is no SMTP in this cluster and no `email` attribute on any user,
+# so a self-service recovery flow could only verify the person by asking for a username — which is
+# not verification, it is account takeover with extra steps. Self-service needs mail first; that is
+# the pending half of the issue.
+#
+# For the same reason the flow has NO identification stage: only prompt + write. Entering it without
+# a valid recovery token leaves `pending_user` unset and the flow goes nowhere. Adding an
+# identification stage here would re-open the hole from inside, so do not add one until there is an
+# email stage in front of it.
+#
+# WHAT IT REUSES
+#
+# Both stages come from authentik's own "Default - Password change flow" and are shared with it:
+#   default-password-change-prompt  -> password + repeat, behind the default password policy
+#                                      (zxcvbn score 2, 8 chars minimum)
+#   default-password-change-write   -> user_creation_mode: never_create, so it can only ever
+#                                      update an existing user
+# Nothing new to maintain, and the password rules stay written in one place.
+#
+# BOTH BRANDS, ON PURPOSE
+#
+# Authentik picks the brand by the request's Host. From the LAN that is authentik.casa.lan; from
+# outside the house the app reaches Authentik through the Cloudflare tunnel as
+# auth-casa.liontechsolution.com (see 40-cocina-oidc.yaml), which matches no brand domain and
+# therefore falls back to `authentik-default`. Setting only one of them would make recovery work in
+# the kitchen and fail from the street, which is exactly when it is needed.
+#
+# The brand entry for authentik.casa.lan is intentionally NOT merged into 10-brand-web-cert.yaml:
+# that file's job is the UI certificate, and its !Find resolves to null until cert discovery has
+# run. Keeping recovery separate means a cert hiccup cannot take the recovery flow down with it.
+#
+# HOW TO USE IT
+#
+#   Admin UI -> Directory -> Users -> (user) -> ... -> Create recovery link, and send the link.
+#   Fallback without the UI:
+#     kubectl -n security-casa exec deploy/authentik-casa-worker -c worker -- \
+#       ak create_recovery_key 60 <username>
+#   That command prints a RELATIVE path (/recovery/use-token/<key>/) — prepend the host. It does not
+#   use this flow at all: it logs the user straight in, and they change the password from /if/user/.
+version: 1
+metadata:
+  name: casa-recovery-flow
+  labels:
+    blueprints.goauthentik.io/instantiate: "true"
+    blueprints.goauthentik.io/description: "casa password recovery flow, admin-link only (rev1)"
+entries:
+  - id: recovery-flow
+    model: authentik_flows.flow
+    identifiers:
+      slug: recuperacion-casa
+    attrs:
+      name: Recuperar la contraseña
+      title: Pon una contraseña nueva
+      designation: recovery
+      # `none`, not `require_unauthenticated`: the recovery link is also the way somebody already
+      # signed in on another device gets a fresh password, and there is no reason to refuse them.
+      authentication: none
+
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      target: !KeyOf recovery-flow
+      stage: !Find [authentik_stages_prompt.promptstage, [name, default-password-change-prompt]]
+      order: 0
+
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      target: !KeyOf recovery-flow
+      stage: !Find [authentik_stages_user_write.userwritestage, [name, default-password-change-write]]
+      order: 1
+
+  # The brand serving the LAN hostname.
+  - model: authentik_brands.brand
+    identifiers:
+      domain: authentik.casa.lan
+    state: present
+    attrs:
+      flow_recovery: !KeyOf recovery-flow
+
+  # The default brand, which is what answers for auth-casa.liontechsolution.com — everything that
+  # does not match a brand domain lands here, and that is every login from outside the house.
+  - model: authentik_brands.brand
+    identifiers:
+      domain: authentik-default
+    state: present
+    attrs:
+      flow_recovery: !KeyOf recovery-flow
