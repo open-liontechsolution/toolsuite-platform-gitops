@@ -1,0 +1,110 @@
+# OAuth2/OIDC provider + application for helit QA (juanjocop/cocina-familiar#17).
+#
+# A SECOND provider for the same application, and that is the whole point. helit's QA environment
+# exists to prove that the lock closes before anything reaches the family's pantry: `DespensaAuthGuard`
+# lets every request through when no OIDC is configured, so a green build in a laptop proves nothing
+# about the guard. QA is where that gets tested for real — against Authentik and through the tunnel.
+#
+# Reusing the prod provider (`cocina`) would mean a QA test authenticating with the credentials that
+# open the real pantry, and a QA token being accepted by prod. Separate provider, separate slug,
+# separate hostname. Same people: the `familia` binding below is the same one prod uses, because the
+# testers ARE the family.
+#
+# Mirrors 40-cocina-oidc.yaml deliberately, down to the comments that explain the two settings whose
+# default is wrong (`grant_types` and `offline_access`). QA validating a differently-configured
+# provider than prod would validate the wrong application.
+#
+# Every value here has a twin in juanjocop/k3s-local-apps-manifests,
+# helit/overlays/qa/patch-web-deployment.yaml, and they have to agree byte for byte:
+#
+#   OIDC_ISSUER_URL  https://auth-casa.liontechsolution.com/application/o/helit-qa/   <- the slug below
+#   OIDC_CLIENT_ID   helit-qa                                                          <- client_id below
+#   OIDC_AUDIENCE    helit-qa                                                          <- client_id again
+#   APP_PUBLIC_URL   https://helit-qa.liontechsolution.com                             <- the redirect below
+#
+# Post-apply manual step, and it is NOT in git anywhere: the Public Hostname
+#   helit-qa.liontechsolution.com -> http://cocina-familiar-web.helit-qa.svc.cluster.local:80
+# in the `k3s-nonprod` Cloudflare tunnel. Without it the redirect resolves to nothing from outside
+# the house — and outside the house is the only place this is ever used.
+#
+# (The Service is still called `cocina-familiar-web`: the objects get renamed in
+# juanjocop/cocina-familiar#22, not here.)
+version: 1
+metadata:
+  name: helit-qa-oidc
+  labels:
+    blueprints.goauthentik.io/instantiate: "true"
+    blueprints.goauthentik.io/description: "helit QA OIDC provider + application"
+entries:
+  - id: helit-qa-provider
+    model: authentik_providers_oauth2.oauth2provider
+    identifiers:
+      name: helit-qa
+    attrs:
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      # `public` = no client secret; PKCE S256 is what proves the exchange comes from whoever
+      # started the flow. Same as prod, and it keeps QA free of one more thing to seal.
+      client_type: public
+      # Fixed, not generated: it travels in every login URL and it is written in clear text in the
+      # overlay's Deployment, so it has to be predictable.
+      client_id: helit-qa
+      # OBLIGATORIO, y el default es VACÍO — ningún grant permitido. Sin esto Authentik 2026.5
+      # contesta al `authorize` con `invalid_request` / "The request is otherwise malformed", que no
+      # dice nada; el motivo real solo sale en el log del servidor. Y como el `authorize` sí
+      # redirige de vuelta al callback, desde la app se ve como un error genérico de estado.
+      #
+      # `refresh_token` va junto al otro a propósito: sin él el canje inicial funcionaría y la
+      # renovación no, así que el fallo aparecería a los diez minutos del primer login — que en QA
+      # es peor todavía, porque la validación habría dado el visto bueno antes de que apareciera.
+      grant_types:
+        - authorization_code
+        - refresh_token
+      # Exact match, not a regex. The app builds this from APP_PUBLIC_URL and it must agree byte for
+      # byte or Authentik shows its own error page, outside our logs.
+      redirect_uris:
+        - matching_mode: strict
+          url: https://helit-qa.liontechsolution.com/api/auth/callback
+      # The same validity windows as prod. Shortening them here would make QA exercise a token
+      # lifecycle that prod never sees.
+      access_code_validity: minutes=1
+      access_token_validity: minutes=10
+      refresh_token_validity: days=30
+      sub_mode: hashed_user_id
+      include_claims_in_id_token: true
+      property_mappings:
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, openid]]
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, profile]]
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, email]]
+        # `offline_access` is what makes Authentik issue a refresh token at all. Without it the
+        # token endpoint answers 200 with no refresh_token and the app logs
+        # "el proveedor devolvió 200 sin tokens" on every login.
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, offline_access]]
+      signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
+
+  - id: helit-qa-app
+    model: authentik_core.application
+    identifiers:
+      slug: helit-qa
+    attrs:
+      name: helit (QA)
+      # The slug above is what lands inside the issuer URL configured in the overlay:
+      #   https://auth-casa.liontechsolution.com/application/o/helit-qa/
+      # Renaming it silently breaks OIDC_ISSUER_URL in helit/overlays/qa.
+      provider: !Find [authentik_providers_oauth2.oauth2provider, [name, helit-qa]]
+      meta_description: Entorno de pruebas de helit. Datos inventados, no es la despensa de casa.
+      meta_publisher: casa
+      # Visible in the launcher, unlike prod: prod is opened from the phone's home screen, but QA is
+      # opened deliberately, occasionally, and by somebody who has to be able to find it.
+      open_in_new_tab: false
+      policy_engine_mode: any
+
+  # Same `familia` binding as prod: the people who validate QA are the people who live here. What
+  # separates the two environments is the provider and the data, not who may log in.
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !Find [authentik_core.application, [slug, helit-qa]]
+      group: !Find [authentik_core.group, [name, familia]]
+      order: 0
+    attrs:
+      enabled: true
