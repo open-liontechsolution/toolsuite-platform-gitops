@@ -60,6 +60,9 @@ Lo que sigue es el inventario, y sobre todo qué parte de él está declarada.
 | `keycloak_dev` | `postgres` | Keycloak (`security-dev`) | **no** |
 | `tradingtool-dev` | `tradingtool-dev-user` | tradingtools dev | **no** |
 | `tradingtool-qa` | `tradingtool-qa-user` | tradingtools qa | **no** |
+| `cocina` | `cocina` | helit **prod**, la despensa de casa | sí, desde el 31/08/2026 |
+| `helit_dev` | `helit_dev` | helit dev (datos falsos) | sí, desde el 03/09/2026 |
+| `helit_qa` | `helit_qa` | helit qa (datos falsos) | sí, desde el 03/09/2026 |
 | ~~`deal_tracker_prod`~~ | — | — | **se fue en la #71**, ver abajo |
 
 Las cinco marcadas se crearon a mano contra el secret superusuario y **no aparecen en ningún repositorio**.
@@ -71,8 +74,15 @@ era dueño de cada una. Es el mismo agujero que los realms de Keycloak antes de 
 deal-tracker— se trasladó al cluster general del tier de producción (`apps/data/platform-postgres`,
 release `platform-postgres-prod`, ns `data-prod`), porque compartir pod de `instances: 1` con dev y QA
 significaba que un rollout provocado por cualquiera de los otros inquilinos era una caída de producción.
-Era **la única** base declarada además de la del initdb, así que este cluster se queda otra vez sin
+Era **la única** base declarada además de la del initdb, así que este cluster se quedó otra vez sin
 ningún role en git y con cinco de sus seis bases sin escribir en ninguna parte.
+
+**Eso duró hasta el 31/08/2026**, cuando entró `cocina` (la despensa de casa) y con ella el primer
+role declarado desde la #71. El 03/09/2026 se le sumaron `helit_dev` y `helit_qa`
+([juanjocop/cocina-familiar#17](https://github.com/juanjocop/cocina-familiar/issues/17)), los dos
+entornos de pruebas de la misma aplicación. **El agujero sigue abierto para las cinco de arriba** —
+lo que ha cambiado es que ya no es el cluster entero: las tres bases nuevas sí se reconstruyen desde
+git, y son la prueba de que el camino declarado funciona en este cluster.
 
 ### Quitar el último role de `cluster.cluster.roles` no lo quita del cluster
 
