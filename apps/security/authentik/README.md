@@ -67,6 +67,29 @@ helm template authentik-casa . -f values.yaml -f environments/local/casa.yaml
 helm lint . -f values.yaml -f environments/local/casa.yaml
 ```
 
+Helm only proves the YAML renders into the ConfigMap. It says nothing about whether authentik will
+accept the blueprint — and **an invalid blueprint is skipped silently**, with the reason buried in
+the worker log, so `Synced/Healthy` is not evidence that it applied.
+
+To check that before merging, run the importer's own validation against the live instance. It runs
+the whole import inside a transaction and rolls it back, so it resolves every `!Find` / `!KeyOf`
+for real without writing anything:
+
+```bash
+B64=$(base64 -w0 blueprints/50-recovery-flow.yaml)
+kubectl -n security-casa exec deploy/authentik-casa-worker -c worker -- ak shell -c "
+import base64
+from authentik.blueprints.v1.importer import Importer
+ok, log = Importer.from_string(base64.b64decode('$B64').decode('utf-8')).validate()
+print('VALID:', ok)
+for entry in log: print(' ', entry)
+"
+```
+
+`VALID: True` plus a log line per entry means every reference resolved. Afterwards confirm nothing
+persisted (query the models it would have created) — that is what tells the rollback apart from a
+real apply.
+
 ## Acceptance (Fase 1)
 
 UI answers over HTTPS; worker system tasks green; pod restarts keep state; a Pi node
