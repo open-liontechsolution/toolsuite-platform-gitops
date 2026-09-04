@@ -240,3 +240,110 @@ users:
     clientRoles:
       realm-management:
         - manage-users
+
+# ============================================================================
+# ENTRAR CON GOOGLE (deal-tracker#682)
+#
+# LO PRIMERO, porque es lo que nadie espera: `registrationAllowed: false` NO gobierna el
+# login federado. Quien decide si un desconocido consigue cuenta es el flow de First
+# Broker Login, y el built-in de Keycloak lleva `idp-create-user-if-unique`, que da de
+# alta a CUALQUIERA con cuenta de Google. Un IdP anadido sin tocar el flow es registro
+# publico abierto, y no lo parece por ningun lado.
+#
+# De ahi este flow, que va ANTES que el IdP porque el IdP lo referencia. Lleva dos
+# autenticadores y lo importante es el que NO lleva:
+#   - idp-detect-existing-broker-user   busca por correo un usuario que YA exista
+#   - idp-auto-link                     lo enlaza
+# Sin `idp-create-user-if-unique` un desconocido no encuentra a nadie y el flujo muere.
+# El invitado si entra, porque el backend le pre-creo la cuenta un segundo antes de
+# mandarlo a Google. O sea: GOOGLE NUNCA DA DE ALTA, LA INVITACION SI.
+#
+# Medido el 04/09/2026 con una cuenta de Google real contra un Keycloak 26.5.1
+# desechable: sin pre-crear, el rechazo es real (401, cero usuarios creados, y un evento
+# IDENTITY_PROVIDER_FIRST_LOGIN_ERROR con error=user_not_found que ademas lo hace
+# observable); pre-creando, el mismo usuario entra sin teclear contrasena.
+#
+# NO METAS AQUI `idp-review-profile`. Ese autenticador escribe el formulario enviado de
+# vuelta en el contexto federado, y `idp-detect-existing-broker-user` empareja por el
+# correo DE ESE CONTEXTO: la combinacion «review-profile + auto-link» deja que cualquiera
+# teclee el correo de un invitado y se enlace a su cuenta. El built-in se lo permite
+# porque lo compensa con `idp-confirm-link` y verificacion por correo, que es justo lo
+# que aqui se ha quitado.
+#
+# ESTE FLOW SE CREA UNA VEZ Y NO SE CAMBIA EN SU SITIO. Medido: config-cli borra y recrea
+# los flows no-builtin, y el DELETE da 500 mientras algo lo referencie, asi que cambiarle
+# hasta la descripcion deja el import fallando cada noche —y con el, cualquier otro cambio
+# del realm—. El fallo es fail-safe (el realm queda como estaba), pero para cambiarlo hay
+# que ir en blue/green: alias NUEVO y repunte de las dos referencias en el MISMO import, y
+# retirar el viejo en uno posterior. Nunca desapuntar para cambiar: eso deja el built-in
+# —el que crea usuarios— en juego mientras dure.
+authenticationFlows:
+  - alias: alta-solo-por-invitacion
+    description: "Enlaza con un usuario que YA existe. Nunca crea cuentas (deal-tracker#682)."
+    providerId: basic-flow
+    topLevel: true
+    builtIn: false
+    authenticationExecutions:
+      - authenticator: idp-detect-existing-broker-user
+        requirement: REQUIRED
+        priority: 10
+        userSetupAllowed: false
+      - authenticator: idp-auto-link
+        requirement: REQUIRED
+        priority: 20
+        userSetupAllowed: false
+
+# EL BINDING DE REALM, Y NO ES REDUNDANCIA CON EL DEL IdP.
+#
+# El `firstBrokerLoginFlowAlias` del IdP es un OVERRIDE. Si queda vacio o su alias no
+# resuelve, Keycloak cae a ESTE binding, que de fabrica es el built-in `first broker
+# login` — el que si crea usuarios. Medido dejando el campo del IdP vacio: el desconocido
+# pasa de 401 a 302 y SE LE CREA LA CUENTA, sin un error, sin un aviso y sin nada en
+# ningun log. Un typo en el alias o un PUT parcial del IdP abren el registro en silencio.
+#
+# Con esto puesto el fallback tambien es fail-closed (medido: vuelve el 401), y cualquier
+# IdP que alguien anada en el futuro sin override hereda la politica segura.
+firstBrokerLoginFlow: alta-solo-por-invitacion
+
+# EL PRIMER identityProviders DE ESTE REPO.
+#
+# `trustEmail: true` porque quien acaba de demostrar la propiedad del correo es Google, y
+# mandarle ademas nuestro correo de verificacion es pedirle que pruebe dos veces lo mismo.
+# `storeToken: false` porque no llamamos a ninguna API de Google: el id_token se usa una
+# vez para autenticar y se tira — que es tambien por lo que la caducidad de 7 dias de las
+# autorizaciones en modo Testing no nos afecta.
+#
+# `syncMode: FORCE` es lo que hace que el apellido de relleno que nuestra alta se ve
+# obligada a poner desaparezca solo en el primer login federado, SIN un solo mapper
+# (medido: pasa a ser el apellido real de Google). Tiene precio y es una decision, no un
+# efecto secundario: FORCE pisa tambien el `firstName` en CADA login, o sea que el nombre
+# entero que la persona tecleo en el alta se sustituye por el `given_name` de Google. Si
+# alguien lo baja a IMPORT, que sepa que entonces el relleno se queda para siempre: en
+# este diseno el broker nunca CREA al usuario, solo lo enlaza, e IMPORT significa «solo al
+# crear».
+#
+# EL SECRETO NO ESTA AQUI, igual que la clave de Resend: entra por var-substitution desde
+# el SealedSecret, re-sellado POR INSTANCIA. Aplica la advertencia en mayusculas del bloque
+# del SMTP, mas arriba, sobre no escribir marcadores de ejemplo en los comentarios.
+#
+# El client de Google es PROPIO DE ESTA INSTANCIA, mismo criterio que el SMTP y el bot: una
+# fuga de la credencial de pruebas no puede alcanzar al dominio de produccion. Su redirect
+# URI dada de alta en Google es la de este realm y este host.
+identityProviders:
+  - alias: google
+    displayName: Continuar con Google
+    providerId: google
+    enabled: true
+    trustEmail: true
+    storeToken: false
+    linkOnly: false
+    addReadTokenRoleOnCreate: false
+    firstBrokerLoginFlowAlias: alta-solo-por-invitacion
+    config:
+      # El clientId NO es un secreto: Google lo publica en la URL de autorizacion de
+      # cada login, asi que va literal. Es propio de ESTA instancia.
+      clientId: "314849492897-3rfqu4np4i4f11lfrt51dl7qknksqudi.apps.googleusercontent.com"
+      clientSecret: "$(env:GOOGLE_CLIENT_SECRET_DEAL_TRACKER_PROD)"
+      defaultScope: "openid profile email"
+      syncMode: FORCE
+      prompt: select_account
