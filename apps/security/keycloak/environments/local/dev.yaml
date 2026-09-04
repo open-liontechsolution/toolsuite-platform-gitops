@@ -199,3 +199,11 @@ realmConfig:
     name: keycloak-realm-smtp
     encryptedData:
       SMTP_PASSWORD_DEAL_TRACKER_DEV: AgAL4MVhQP9kxUU4yEqt+Kdtp/NH9+TYNTOgv2N+ILr3NKn/0R3W58UUDYJYg5XO5RjxD1Sv7oOyJ0x33sD09Z4METiepPXbZatZE0Jm+r5Qnoc+UDohz234MXt4JU4aJrEkXPFXh4gF2O3BdsTB3Hh6yuVVIiSaaiF3W4vVuMK0nZjxgSbedh2nmYifkJUOfORRT5rnXB0X91V74MCHF4LX6b5e9LXXLD29kvTgJmFu+Of84a5MHekyQE4eJUxgNrNt09Af2aM2t2B5rAYYHQSAOqd7V7p9Ltd/Ee/AJW6cFlxkrf5MvXG0H2r61W3abl2K5b1oYjYRxbVBMacZHPYRVsFrWr+3PBpS2vzLqekQQsXaVO+FNTslPxDxs20DavUeDmepbj/zt7RErqdyKgGlCC1pG7mCqBSIpZl16oRl+1dGIwlrqaZGGUDSNJlo7Tr2sZxeFl6cwi3ililWg9N5asejzRTZI55Pq98ZRVA8ufEDYArMED/j9UX3ytbg2Xp27W0xJ9iVBn3uwerP7+J2zd59prCbkJURTVmq/F51bbsaNWFMF07y4aVWrrz08vQdIVgzErHVaUu+3qq31U60U0SSkBx9pFZ9dpDxxZv3K7/6pvnnUSw6BLC8OPyT2tyPStEkQpM8iVLwHM7McPO9m5+eMouFI4TUTUQIpL9B4XuqCHxwRKzmrIIJTOzMj5CBcBOAk0GZz+wBwj4X0NB51UjoNFc1GbCp/x7y3fk3kgfaWX8=
+
+      # EL SECRETO DEL CLIENT DE GOOGLE (deal-tracker#682), re-sellado contra ESTA
+      # instancia: el ciphertext de la otra no vale, igual que pasa con la clave de
+      # Resend. Vive en este secret y no en uno propio porque el template hace `range`
+      # sobre `encryptedData`, asi que una clave mas entra sin tocar el chart — lo que
+      # se queda enganoso es el nombre `smtpSecret`, que ya no es solo de SMTP.
+      GOOGLE_CLIENT_SECRET_DEAL_TRACKER_DEV: AgCOHMJdvY1MkK7UIfkE1fYbvXpOc5u7btrSSUFLdm00igN9rGsWmuKfPTJ8uyacUmN3Jh7CsDaQLP8iBi/E1CAQOWLeZnfL+sv1ZX3lfgKUBRFFpeWGVRWqihFNuQGTPF0aSguw4vzwzarxEXmLWCQ4e/BF8wweQYAcLoGtKV3+ut5fYBDRSK4BKqy1xK1B3QUT3fBFkrUV/hROTOEV4K0ADYxp8pF7wklMr08aKf8E/kmX2s3pzR49L8si5C+VnSpf9bXlfvztjcW+5Hr+5v+N0cddvmhh4dzzsaA0h/AJ/ot4Meuad964zh5omRxmkvkmZJbnpSjn8ZRPtPRgkdyJ6+U9atiMMbOWA6ocnUtz5s2jqWLMn8NGb61XzfH7704jIhO1wnp3xlp2ntwwDX9jPGdWduPv6GAGXjEJzpj5hPztrF7+otNJHQzj6fUYVo2z1bEQ7t/xQaVA4BDgYzgvSpUOCbqS9exMsQTffiTGIp6OM9lNP43boNOfujKTJElOysopx+9M1t3SrGqKg3L5H63cuHT6/GMjpv38u6Y3ViEqq521XsUwnKXyUQznLM2JMUXIusrjEx72wGYlTj+DTr4LPRQYyA8yvNhjNtMwp9izjCKxuSlW+CFi7fnF3euBJfhep1JDgCanMoOxnx23AuTbbPuarHuQQg7PtZOR76VH1gYxvuKsL8sEwcGhiqdquTrPjyVLSUJhYyq/A47KNlXVxASjPZFwvGBKxwZLOgP9dg==
+
