@@ -172,6 +172,36 @@ kubectl -n security-casa exec -it deploy/authentik-casa-worker -c worker -- \
   ak changepassword <username>
 ```
 
+### The QA test user (`qa-helit`), which needs TWO secrets
+
+`42-helit-qa-test-user.yaml` creates the account helit's release gate authenticates as
+(juanjocop/cocina-familiar#66). It is the one account here that needs **two** post-apply gestures,
+because the validation drives it through two different doors and each door wants a different secret.
+
+```bash
+# 1. Login password — the browser front signs in through the Authentik form, like the family does.
+kubectl -n security-casa exec -it deploy/authentik-casa-worker -c worker -- \
+  ak changepassword qa-helit
+```
+
+`changepassword` and not a recovery link here: the recovery link exists so nobody has to know
+somebody else's password, and this one has to be written into a file anyway.
+
+**2. App Password** — the API front (`qa-token.sh`) exchanges it at the token endpoint. The blueprint
+declares the token object, so it exists after the sync; only its key is not in git. Read it once at
+**Admin UI → Directory → Tokens & App passwords → `qa-helit-app-password` → copy**.
+
+Both values go into `.claude/qa-test-user.local` in the helit checkout (gitignored), as
+`QA_PASSWORD` and `QA_APP_PASSWORD` respectively.
+
+**The App Password is not a password**, and mixing them up costs an afternoon. Authentik's `password`
+grant never checks the user's login password: `providers/oauth2/views/token.py` looks for a `Token`
+with `intent=INTENT_APP_PASSWORD` whose `key` is what arrived in the `password` field, and answers
+`invalid_grant` when it finds none — which reads exactly like a wrong password. The same
+`invalid_grant` also comes back when the grant is not listed in the provider's own `grant_types`
+(`password` is enabled on `helit-qa` only, never on `cocina`); the discovery document's
+`grant_types_supported` is global metadata and says nothing about a given provider.
+
 ### What is deliberately NOT enabled
 
 There is **no "Forgot password?" on the login page**, and turning it on is not a one-liner. That
