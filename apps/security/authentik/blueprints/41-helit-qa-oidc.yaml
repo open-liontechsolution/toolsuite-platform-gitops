@@ -34,7 +34,7 @@ metadata:
   name: helit-qa-oidc
   labels:
     blueprints.goauthentik.io/instantiate: "true"
-    blueprints.goauthentik.io/description: "helit QA OIDC provider + application"
+    blueprints.goauthentik.io/description: "helit QA OIDC provider + application (rev2: password grant)"
 entries:
   - id: helit-qa-provider
     model: authentik_providers_oauth2.oauth2provider
@@ -57,9 +57,21 @@ entries:
       # `refresh_token` va junto al otro a propósito: sin él el canje inicial funcionaría y la
       # renovación no, así que el fallo aparecería a los diez minutos del primer login — que en QA
       # es peor todavía, porque la validación habría dado el visto bueno antes de que apareciera.
+      #
+      # `password` está SOLO aquí, nunca en el provider de prod (40-cocina-oidc.yaml): es lo que deja
+      # a `qa-token.sh` pedir un token sin navegador para el frente de API de `validar-qa`
+      # (cocina-familiar#66). Lo que viaja en ese campo `password` NO es la contraseña de nadie, es la
+      # key de una App Password — Authentik busca un Token con `intent=INTENT_APP_PASSWORD`, y punto.
+      #
+      # Y hay que ponerlo aquí explícitamente aunque el documento de descubrimiento ya liste
+      # `password` en `grant_types_supported`: esa lista es metadata GLOBAL de Authentik, idéntica
+      # para todos los providers, y no dice nada de éste. Lo que manda es este campo
+      # (`views/token.py`: `if self.grant_type not in self.provider.grant_types`), y el error que sale
+      # cuando falta es `invalid_grant` — indistinguible a simple vista de una credencial mala.
       grant_types:
         - authorization_code
         - refresh_token
+        - password
       # Exact match, not a regex. The app builds this from APP_PUBLIC_URL and it must agree byte for
       # byte or Authentik shows its own error page, outside our logs.
       redirect_uris:
