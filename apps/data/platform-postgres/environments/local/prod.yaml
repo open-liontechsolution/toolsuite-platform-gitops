@@ -125,6 +125,25 @@ cluster:
         inherit: true
         connectionLimit: -1
 
+      # Tercer inquilino: helit, la despensa de la familia. Llega desde platform-postgres-dev,
+      # donde la base se llamaba `cocina` y compartia pod con helit_dev y helit_qa — o sea que
+      # cualquier sesion de validacion contra QA estaba a un `-d` de los datos de casa, y lo unico
+      # que lo separaba era una lista blanca dentro de un script. El corte esta en
+      # juanjocop/cocina-familiar#22.
+      #
+      # Role NUEVO, no adoptado: en dev se llamaba `cocina`. Por eso lleva contrasena propia y no
+      # hace falta la precaucion del README sobre los preexistentes.
+      - name: helit
+        ensure: present
+        comment: "helit produccion (juanjocop/cocina-familiar#22)"
+        login: true
+        superuser: false
+        createdb: false
+        passwordSecret:
+          name: helit-db
+        inherit: true
+        connectionLimit: -1
+
     primaryUpdateStrategy: unsupervised
 
     # Tuning para una instancia pequena. Sin cambios respecto a los otros dos clusters
@@ -158,6 +177,16 @@ cluster:
   databases:
     - name: deal_tracker_prod
       owner: deal_tracker_prod
+      databaseReclaimPolicy: retain
+
+    # La despensa de la familia. El nombre `helit` y el del role son CONTRATO con
+    # k3s-local-apps-manifests: viajan dentro del `DATABASE_URL` sellado de `helit/overlays/prod`.
+    #
+    # `retain` importa aqui mas que en ninguna otra fila del repo: con `delete`, borrar el objeto
+    # Database DROPea la base, y esta es la unica del cluster cuyos datos no se pueden volver a
+    # generar con un scraper.
+    - name: helit
+      owner: helit
       databaseReclaimPolicy: retain
 
   # Backup logico a MinIO. Forma completa en el values.yaml base.
@@ -213,3 +242,13 @@ roleSecrets:
   deal-tracker-prod-db:
     username: "AgAs78oTs7x4zKYsSUj4WVr5TfG7hCEJFIOEDSKWVAM00bX83Lrzu1nros3tMK+PhwwgxifU4+In6ajBCDpVWvGCYWEnMcTibjJ/TDsN7DMwe6ihf/f2Op+3sr8nJMMa+BPd3Y+9/lm1ceG1eb8VXH1o3c8Y9cd85sWd2HqIm3fA26oHbAtUDLvnhJPqoaQL3IWmtdV3Qc3pqkQ0iXqLAew9dRgSHuqoB8sY9kMZEFOAewoxWMSL55kcQ9HdwiFOAvxGMPzrVvA+JlMO3Lj3gujr4zw4B2rsqY3O+a+GbhnT9HlfRfCXT1zJtiE40wF5FX+OSxTSI+koMEqgJLXsGKGogXsYLKa67p5ChUq6l8bJZ3tBgkVNHm+IFW2IbNCPxB2jo5R0ErUFrMZAC7pi8ZbwLnW8tr/NuwEIJCCBY90mcYrdCrbexzeak4ZTyC0hnOghjpRwsFryUq9lr4iKOZEGB8DjlIv02AppTaAIlKan6FBdrS3jfjWFl6PT2ec8i7uFw57ZLLxLH6vbMVOp2NpJ7mSLx+ohIbGAzgGSPko/mCKIGwPXHLnH9o+a5Akb7a2uSMb6yq2yMsAzIxpjY+hKvsl9vtxoPu0oWHG0wVTmrYxZVZG22910pc8ZYbFX9AVHJ0IWVrKRvYifR9D/esoOXFBAAearYAMcd+fYQM+5EwsVdrrUCx8WLoZpyEDvVT0QQMHUyE4kgnVRMZcxXSR6Gw=="
     password: "AgBVGJJ+7u8Uxj/brjiK20sEomKGNdqacaGiVmHHUSq3Td2x+VlMRr3i9ba96rz2Nb0bu1bxeJSm94gX7jpW3LFopqjxqynF0HfLb+095XrBH45rQ31Bds3xx/kb+lJO3zKvVxsFJCTgr9oV6vz/ZKxS+Jj5WJiVBQxsEanMkOpx8Om021hAGEBmjG7zlR+T9CCsKnUEwDI0VYd67mTUi64hh5FicGKpRvtVcGWD8q+a3n6+zbqnSY1gtuwfsnk1VybGRyyWrXOwyT54CFqM8UEEaO5+wdGMT/XBeBk0mDmdGqiJpg8ciJQRKtuwMZ22qVW8/BHEuLIyPo8B5o7XYiHubteCh4WqBsT9cvPZpBzEHGgC+tN5mzp1GcH/3RPe2tqhZFY3C2vuHdAJgdJp7yjrlk03I5U3lhxj+UriTOwSqfIvLKz+gaYhZchllXJDaZdsR9ZX571qhljDxtnwCNZYnYbd6UMzjuXUqku0KxjeMfG7987Ks3vYwDGgt29fL84qqGuLAInqv1DzB4Da3mvkHcGOtcD0pIj6am6daO05fqUhLQlfNilOB8pIhZBR53PKRiGlT3LsCl4G6rUYL9pv7FANDuFdTDaAsr1ufr3poaHIyNZhFFbidI65kcvDV0V6FJ2tH3xEMT88X97i7YIm8/LKuCsoLdN2FFp8JcbdInaekyC5CTRMmBWmawjAWjETXLPkXM9kSiYXqIF8jc37WrZJF9D7MBpJMgm0fGw5u1wt9Mo9CInrHPDwjTpi9J8="
+  # Contrasena del role `helit`, generada nueva (05/09/2026): el role no existia en ningun sitio
+  # con ese nombre, asi que no hay nada que reutilizar. La vuelta atras del corte no la necesita —
+  # el `DATABASE_URL` viejo sigue sellado en el historial de k3s-local-apps-manifests.
+  #
+  # El plaintext de `username` es literalmente `helit`: CNPG lo compara, y si no cuadra ignora la
+  # contrasena SIN AVISAR — el Secret se desella, el Cluster sincroniza, y el role se queda sin
+  # poder entrar.
+  helit-db:
+    username: "AgCjQxjlL3QEFfWlYMgzUgJrst50Jb+1I6F/p21gQLGXd7uOywbnFRK6nqSPlyz/WZWg3Fl2nsQdm2TXxVS61M/dg0KZWFPb1hL4cc7I++/VRcOUvby3cpFtBraVYmt2YheuwlkAuRDViqYRhvIQfKatX17BGhO5Jlf6L4kIO/Vj9sVJ2UAS1+Sfxjg9ROUJtfwupwuEFWHKRAQ9iu1jUTPUsBSdFzTHqi3ViaJmPFkjaEnGD+ApxTBZvzUoPRjdSav9m/nbHT921X5IABDQUIH+e5liA5FrBekO5lTQFvUGYSei802E8BI6DZmLV124qRwaagbTBsNj0X/oz+WBbtL0cPGQFBg4jHgLkcvIJdndeKCfue38EwAkIKrzDtYBVI1Iw46DOJTVQ30W5i0fdMBISUu7GRvHWPhT2t3NNxAZQx4wAPspe1k1g7ZQ39pk4Bj3tG6vsidefdDBM29TVuxMA2gxGK1ZseCCCKmpIfVtl0xehD1oKxvKsV8EBNa7HsqfzD0z9HhPPBSwUP07Yt6fAeLMhzS/Y5ePlp5d8APFEJZR6nZGXN0gcdelWziDkuowuHj2yT6SmL9FJkSJIamE4aqUvSe9VcJccvoHCg6oeKkO1fiTXbVD5H6SPnt+AGkUgOlgG/SCXIuIimEa09QvDqGFLOANOTO53eT+7B24SX0poUaube+W62ZfYNUSuh++zgiYZQ=="
+    password: "AgB74+GPtrGlCbc+SQtf2pN9XpPDR/DDEvquQSm74DN9Hz0YbH5hE5SuG9E9/4Hzi17cqvqAt0uTlBsWLIhYFA0I90ND3aHV3Ww3S8MzRI2mua28UDnlg1wtaHuwDZX/WMXQllVEcwPWo7/KykFVN9/9TrItMYgSuSSJpuoRZ6WIhbsJUCCfKVTebpig8r7rx59R0eknkDYTv8TbJwMbHbS8YOQCoEMbhJ1z8UyH24lZScBLiI2pDOoq9uZ4safiZ7CoEiHpI1WImylUIGnGf4HQ7LH+e4ZF5XVxNcocZ8Z/KmBGvay1BaaPkUhd8P32erpBDR3HYkqzwRh7IxRmDSNOgDnVje3dx1oDRuBLOiO4vipDag7GLItG9o17gWLraNAu1lLExaCDnufzCPP2etVLCt0Zwq69WRmTruKp1DYgzFQ6jsg4wDZZQJ7zN0xTP7amC+AswVchcf2JXW8g6ZNKB/xqB+Hxl1m8s3oaBT5Osr3zEhLE7G1tWQHR+A92rZmfOg5PuEjBsdOC3t8vDbL+ICyrB6HwnC0HED2ulqJ2C4ksq1cvmo1L8qfuSIU7pU/4rCOPB3tcWXfygNYXKC4/NcLAdPBJ5SNigohVELUoGXqnQ1vvGAbXb5GSkmSr4Jvo1tNp4J+Ny77vP41hd+oXkSlBA2V6zcRbqCdskcLlSa5Cx2s28Rv6U2QKHw1TD1I99us2lF3dHTEZzsGTgQQgUrD9EzVJwA3zCX1rWcpniw=="

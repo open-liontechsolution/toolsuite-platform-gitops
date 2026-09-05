@@ -13,11 +13,23 @@ Wrapper del chart oficial `cloudnative-pg/cluster`, desplegado por Argo CD.
 |---|---|---|---|
 | `keycloak_prod` | `keycloak_prod` | Keycloak de produccion (`security-prod`) | `cluster.cluster.initdb` |
 | `deal_tracker_prod` | `deal_tracker_prod` | deal-tracker produccion (`deal-tracker-prod`) | `cluster.databases` + `cluster.cluster.roles` + `roleSecrets` |
+| `helit` | `helit` | helit produccion — la despensa de la familia (`helit-prod`) | igual que la anterior |
 
-**Las dos estan declaradas**, que es la diferencia con `platform-postgres-dev`: alli
+**Las tres estan declaradas**, que es la diferencia con `platform-postgres-dev`: alli
 cinco de siete bases se crearon a mano y no viven en ningun repositorio (ver
 `apps/data/cnpg/README.md`). Aqui reconstruir el cluster desde cero reproduce el
 reparto completo de bases, duenos y roles.
+
+`helit` llega vacia y se rellena en la ventana del corte
+(juanjocop/cocina-familiar#22) con un `pg_dump` de la base `cocina` de
+`platform-postgres-dev`, que es donde vivia. Se declara aqui **antes** de la ventana a
+proposito: primero el role, despues el `DATABASE_URL` sellado del otro repo, por lo que
+dice `apps/data/cnpg/environments/local/dev.yaml` sobre los 40 minutos en
+CrashLoopBackOff.
+
+La crea el CRD `Database`, no un `CREATE DATABASE` a mano, y eso basta para el
+*collation*: `template1` de este cluster ya es `C`/`C`/`UTF8`, que es de lo que depende
+el plegado de `normaliza()` en la app.
 
 ### Por que el initdb es el del IdP
 

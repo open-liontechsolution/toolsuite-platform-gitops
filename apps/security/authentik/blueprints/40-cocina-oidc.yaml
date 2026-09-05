@@ -14,18 +14,23 @@
 # authorisation: the app itself has no roles, which is right for five people in one house — but it
 # means removing someone from `familia` is the only way to revoke access.
 #
-# Post-apply manual step: none for secrets. But the app is published through the shared
-# `k3s-nonprod` Cloudflare tunnel, and Authentik has to be reachable from the same place or the
-# login cannot complete from outside the house — the redirect would point at authentik.casa.lan,
-# which only resolves on the LAN. Two Public Hostnames in Zero Trust:
-#   cocina.liontechsolution.com    -> cocina-familiar-web.cocina-familiar-dev.svc.cluster.local:80
-#   auth-casa.liontechsolution.com -> authentik-casa-server.security-casa.svc.cluster.local:80
+# Post-apply manual step: none for secrets. But the app is published through a shared Cloudflare
+# tunnel, and Authentik has to be reachable from the same place or the login cannot complete from
+# outside the house — the redirect would point at authentik.casa.lan, which only resolves on the
+# LAN. Public Hostnames in Zero Trust, today:
+#   cocina.liontechsolution.com    -> cocina-familiar-web.cocina-familiar-dev.svc.cluster.local:80  (k3s-nonprod)
+#   auth-casa.liontechsolution.com -> authentik-casa-server.security-casa.svc.cluster.local:80      (k3s-nonprod)
+#
+# The prod cut (juanjocop/cocina-familiar#22) changes BOTH of the app's rows, and the second one is
+# the trap: `helit.liontechsolution.com` is added on the `k3s-prod` tunnel, and `cocina.` keeps its
+# tunnel but its internal target moves — new namespace AND new service name — so leaving it alone
+# is what locks the family out. `auth-casa.` does not move.
 version: 1
 metadata:
   name: cocina-oidc
   labels:
     blueprints.goauthentik.io/instantiate: "true"
-    blueprints.goauthentik.io/description: "cocina-familiar OIDC provider + application (rev2: grant_types)"
+    blueprints.goauthentik.io/description: "cocina-familiar OIDC provider + application (rev3: segundo redirect_uri, helit.)"
 entries:
   - id: cocina-provider
     model: authentik_providers_oauth2.oauth2provider
@@ -51,11 +56,23 @@ entries:
       grant_types:
         - authorization_code
         - refresh_token
-      # Exact match, not a regex. The app builds this from APP_PUBLIC_URL and it must agree
-      # byte for byte or Authentik shows its own error page, outside our logs.
+      # Exact match, not a regex. The app builds these from APP_PUBLIC_URLS and one of them must
+      # agree byte for byte or Authentik shows its own error page, outside our logs.
+      #
+      # TWO of them since the prod cut (juanjocop/cocina-familiar#22), and the second is not a
+      # replacement: `helit.` is the new canonical name and `cocina.` stays alive because it is
+      # the one the family has saved on their phones. The app picks the one matching the request's
+      # `Host` and carries that choice in its `cf_oauth` cookie, so the token exchange sends the
+      # very same string it sent to `authorize` — which is what `strict` demands.
+      #
+      # Adding the second one here is SAFE BEFORE the cut and REQUIRED before it: an unused
+      # redirect URI changes nothing, but a manifest pointing at `helit.` without this entry is a
+      # login that dies in Authentik's own error page.
       redirect_uris:
         - matching_mode: strict
           url: https://cocina.liontechsolution.com/api/auth/callback
+        - matching_mode: strict
+          url: https://helit.liontechsolution.com/api/auth/callback
       # 10 minutes of access token. The SPA renews it from the backend before it expires, and a
       # short window limits what a leaked access token is worth — the refresh token is the one
       # that lasts, and that one never reaches the browser.
