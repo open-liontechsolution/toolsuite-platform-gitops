@@ -96,6 +96,33 @@ networkPolicy:
       - 172.16.0.0/12
       - 192.168.0.0/16
 
+  # Salida a los endpoints de un IdP federado (deal-tracker#812). La SEGUNDA regla con
+  # `ipBlock`, y hace falta por lo mismo que la de SMTP: la regla de 443 de la policy va
+  # por `namespaceSelector`, que solo casa pods del cluster, asi que sin esto Keycloak NO
+  # llega a `oauth2.googleapis.com` y el brokering se queda sin poder canjear el `code`.
+  #
+  # EL SINTOMA NO SEÑALA AQUI, y por eso se escribe entero: el usuario se autentica en
+  # Google, vuelve con su `code`, y lo que ve es un 524 de Cloudflare ~100s despues. En el
+  # log de Keycloak sale como `java.net.SocketException: Network is unreachable` contra
+  # oauth2.googleapis.com, reintentado hasta que el proxy corta. La aplicacion, el realm y
+  # el flow estan bien; lo que falta es el socket.
+  #
+  # Costo el veredicto de la validacion de deal-tracker v0.11.0: el checkpoint del alta
+  # con Google no se pudo ejercer y la version salio NO CONCLUYENTE.
+  #
+  # POR QUE VA ENCENDIDO TAMBIEN EN PROD aunque alli el boton este apagado: el realm de
+  # produccion YA DECLARA el IdP (`realms/prod/deal-tracker-prod.yaml`), y el interruptor
+  # que lo hace visible vive en OTRO repo (el overlay de prod de deal-tracker). Dejar la
+  # policy corta aqui es volver a partir en dos mitades lo que ya se olvido una vez.
+  idp:
+    enabled: false
+    port: 443
+    # Mismos rangos privados fuera que en SMTP, y por el mismo motivo.
+    except:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+
 # Realms declarados en git (issue #49)
 # Los ficheros de realms/ se montan en un ConfigMap y los aplica keycloak-config-cli:
 #   - Job con hook PostSync -> corre en cada sync de la Application (cambio intencionado)
