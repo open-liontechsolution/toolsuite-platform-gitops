@@ -167,6 +167,12 @@ networkPolicy:
   smtp:
     enabled: true
 
+  # Salida a oauth2.googleapis.com:443 para el brokering del IdP de Google
+  # (deal-tracker#812). Sin esto el login federado muere en un 524 y el log solo dice
+  # "Network is unreachable". El realm de este entorno ya declara el IdP.
+  idp:
+    enabled: true
+
 # Realms declarados en git (issue #49). El resto de la configuracion esta en el
 # values.yaml base; aqui solo se enciende y se apunta al Service de esta release.
 realmConfig:

@@ -47,8 +47,11 @@ spec:
 
       Y no vale con anadir el 587 a la regla de arriba: esa lleva `namespaceSelector`,
       que SOLO casa pods del cluster. Para salir a smtp.resend.com hace falta un
-      `ipBlock`, y hoy no hay ninguno en toda la policy — o sea que ni el 443 de ahi
-      arriba llega de verdad a internet. Este es el unico camino de salida real.
+      `ipBlock` — o sea que el 443 de ahi arriba NO llega a internet.
+
+      (Este comentario decia ademas "y hoy no hay ninguno en toda la policy". Dejo de ser
+      cierto con la regla del IdP de abajo, que existe justamente porque ese 443 corto no
+      llegaba a Google: deal-tracker#812.)
 
       Acotado al puerto del SMTP y con los rangos privados en `except`, para que abrir
       la salida a internet no sea ademas abrir la salida al resto del cluster ni a la
@@ -62,5 +65,27 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.networkPolicy.smtp.port }}
+    {{- end }}
+    {{- if .Values.networkPolicy.idp.enabled }}
+    {{- /*
+      SIN ESTA REGLA NO FUNCIONA NINGUN IdP FEDERADO, y el sintoma señala a cualquier
+      sitio menos aqui: quien entra por "Continuar con Google" se autentica bien, vuelve
+      con su `code`, y recibe un 524 del proxy ~100s despues. Keycloak lo registra como
+      `java.net.SocketException: Network is unreachable` contra oauth2.googleapis.com.
+
+      El canje del `code` es una llamada SERVIDOR A SERVIDOR de Keycloak a Google: que el
+      navegador del usuario llegue a Google no dice nada de si llega este pod. Por eso el
+      443 de la regla de `namespaceSelector` no vale — solo casa pods del cluster.
+
+      Acotado al 443 y con los rangos privados en `except`, igual que SMTP.
+    */}}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              {{- toYaml .Values.networkPolicy.idp.except | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.idp.port }}
     {{- end }}
 {{- end }}
