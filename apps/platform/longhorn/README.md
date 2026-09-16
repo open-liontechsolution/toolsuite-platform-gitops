@@ -154,8 +154,13 @@ the target version + Application `Synced/Healthy`.
 - **No downgrade after 1.10** — validate each hop before proceeding; there is no rollback.
 - **CRD `v1beta1` → `v1beta2`**: ensure stored CRDs are migrated before crossing 1.9 → 1.10
   (known upgrade failure, longhorn#11886). The cluster already reports `crd-api-version: longhorn.io/v1beta2`.
-- **`worker5` is cordoned** (`SchedulingDisabled`) — with `defaultClassReplicaCount: 3` most volumes
-  still replicate elsewhere, but account for it during node drains/rebuilds.
+- **`worker5` is not a Longhorn node** (since 2026-09-16). It is cordoned, and Longhorn never creates
+  an instance-manager on a cordoned node, yet it kept owning `BackupVolume`s it could not sync (false
+  `LonghornVolumeBackupStale`). It now carries the taint `node.longhorn.io/excluded=true:NoExecute`,
+  which evicts the Longhorn DaemonSets, and its `nodes.longhorn.io` object was deleted. The cluster
+  has **7** Longhorn nodes, not 8 — expect that in upgrade Go/No-Go checks. Revert with
+  `kubectl taint nodes worker5 node.longhorn.io/excluded-`. Runbook in
+  `juanjocop/k3s-local-apps-manifests` → `BACKUPS.md`.
 - **`block-for-eviction-if-contains-last-replica`** is already the live `node-drain-policy` — safe drains.
 - **ServiceMonitors** for Longhorn metrics live in the external `k3s-local-apps-manifests` repo and may
   change endpoints between versions; re-verify metrics after the final hop.
