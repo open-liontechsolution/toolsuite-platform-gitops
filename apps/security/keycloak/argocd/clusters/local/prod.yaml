@@ -3,6 +3,16 @@ kind: Application
 metadata:
   name: keycloak-local-prod
   namespace: argocd
+  annotations:
+    # Igual que en dev y por el mismo motivo: cierra el `OutOfSync` permanente de la
+    # #68. Aplicabamos con ServerSideApply y comparabamos en modo cliente, asi que el
+    # diff veia campos que el apply descarta (`volumes: null` del subchart y los
+    # zero-values con omitempty).
+    #
+    # VA EN UNA ANOTACION Y NO EN syncOptions: es una compare-option, y puesta en el
+    # spec se ignora en silencio (probado). El razonamiento largo y lo medido estan
+    # en el fichero de dev.
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
@@ -48,13 +58,6 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
-      # Igual que en dev, y por el mismo motivo: cierra el `OutOfSync` permanente de
-      # la #68. Aplicabamos con ServerSideApply y comparabamos en modo cliente, asi
-      # que el diff veia campos que el apply descarta (`volumes: null` del subchart y
-      # los zero-values con omitempty). Gobierna la COMPARACION, no el sync, asi que
-      # va en el spec y no en la operacion a mano. El razonamiento largo y lo medido
-      # estan en el fichero de dev.
-      - ServerSideDiff=true
     retry:
       limit: 5
       backoff:
