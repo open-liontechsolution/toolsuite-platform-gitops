@@ -53,6 +53,29 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+      # ESTA ES LA QUE CIERRA LA #68, y va aqui y no en la operacion a mano porque
+      # no es una opcion de sync: gobierna la COMPARACION, que la hace el controller
+      # leyendo el spec.
+      #
+      # El sintoma era un `OutOfSync` permanente del StatefulSet que ningun sync
+      # cerraba. La causa es que aplicabamos con ServerSideApply pero comparabamos en
+      # modo CLIENTE, o sea las dos mitades por mecanismos distintos: el diff de
+      # cliente compara el manifiesto crudo contra el objeto vivo, y el manifiesto
+      # declara campos que el API server NO PUEDE GUARDAR (`volumes: null` que el
+      # subchart emite siempre, y los zero-values con omitempty). El apply los tira,
+      # el diff los echa de menos, y la comparacion vuelve a diferir justo despues de
+      # cada sync — la asimetria que la #68 identifico como "la pista buena".
+      #
+      # Medido el 18/09/2026 sin tocar nada, que es como se confirmo: un
+      # `kubectl apply --server-side --dry-run=server` del render devuelve un objeto
+      # IDENTICO al vivo, campo por campo, en dev y en prod. O sea que por el camino
+      # servidor no hay diferencia ninguna que ver.
+      #
+      # La #68 habia probado `ignoreDifferences` de tres formas (jsonPointers,
+      # + RespectIgnoreDifferences=true, y jqPathExpressions) y ninguna funciono: son
+      # parches sobre el resultado de un diff que se calcula con el mecanismo que no
+      # toca. Esto ataca el mecanismo.
+      - ServerSideDiff=true
     retry:
       limit: 5
       backoff:
