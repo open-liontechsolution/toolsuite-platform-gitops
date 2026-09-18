@@ -48,6 +48,13 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+      # Igual que en dev, y por el mismo motivo: cierra el `OutOfSync` permanente de
+      # la #68. Aplicabamos con ServerSideApply y comparabamos en modo cliente, asi
+      # que el diff veia campos que el apply descarta (`volumes: null` del subchart y
+      # los zero-values con omitempty). Gobierna la COMPARACION, no el sync, asi que
+      # va en el spec y no en la operacion a mano. El razonamiento largo y lo medido
+      # estan en el fichero de dev.
+      - ServerSideDiff=true
     retry:
       limit: 5
       backoff:
@@ -57,12 +64,18 @@ spec:
 
   # Igual que en dev: el chart de codecentric no gestiona `replicas` una vez desplegado.
   #
-  # AVISO, y no es un fallo de este fichero: esta Application va a nacer `OutOfSync`
-  # permanente por lo mismo que `keycloak-local-dev` (issue #68) — la etiqueta
-  # `app.kubernetes.io/instance`, que Argo escribe con el nombre de la Application y el
-  # chart con el del release, y dos zero-values del StatefulSet que el API server borra al
-  # guardar. Esta investigado y no tiene arreglo dentro de este fichero; lo unico que se
-  # puede hacer aqui es no anadir nada que lo empeore.
+  # ESTA APPLICATION NACIO `OutOfSync` PERMANENTE (issue #68) y desde el 18/09/2026 ya
+  # no lo esta. Se deja escrito porque el diagnostico de entonces era correcto en los
+  # sintomas y equivocado en la conclusion, y conviene no repetirlo:
+  #
+  # Se creia que la causa eran tres campos irreconciliables —la etiqueta
+  # `app.kubernetes.io/instance` y dos zero-values del StatefulSet que el API server
+  # borra al guardar— y que no tenian arreglo aqui. En realidad los tres eran el
+  # SINTOMA: se comparaba en modo cliente lo que se aplicaba en modo servidor, asi que
+  # el diff echaba de menos justo lo que el apply descarta. La etiqueta ni siquiera
+  # contaba: Argo excluye del diff su propia etiqueta de tracking.
+  #
+  # El arreglo es `ServerSideDiff=true` en las syncOptions de arriba.
   ignoreDifferences:
     - group: apps
       kind: StatefulSet
