@@ -59,6 +59,25 @@ keycloakx:
   http:
     relativePath: "/"
 
+  # Copia del livenessProbe por defecto del subchart SIN su `initialDelaySeconds: 0`,
+  # y el motivo es que ese cero hacia que la Application no pudiera converger NUNCA.
+  # 0 es el valor por defecto de Kubernetes, asi que el API server no lo guarda: el
+  # manifiesto deseado lo declaraba, el objeto vivo no lo tenia, y ArgoCD veia una
+  # diferencia permanente. keycloak-local-prod y keycloak-local-dev llevaban asi desde
+  # el 22/08 — `OutOfSync` cronico, indistinguible de una deriva de verdad, que es lo
+  # que hace inservible cualquier alerta sobre el estado de sync
+  # (k3s-local-apps-manifests, ArgoCDManualAppDrifted).
+  #
+  # Lo unico que se le quita al valor de upstream es esa linea. Si se sube el subchart
+  # de version, comprobar que el livenessProbe de su values.yaml no ha cambiado por
+  # dentro, porque esta copia se queda congelada en la version que se copio (7.1.7).
+  livenessProbe: |
+    httpGet:
+      path: '{{ tpl .Values.http.relativePath $ | trimSuffix "/" }}/health/live'
+      port: '{{ .Values.http.internalPort }}'
+      scheme: '{{ .Values.http.internalScheme }}'
+    timeoutSeconds: 5
+
 # SealedSecret configuration
 # When enabled, creates a consolidated SealedSecret with all Keycloak credentials
 sealedSecret:
