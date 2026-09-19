@@ -74,11 +74,20 @@ defaultLocale: es
 # Y `{0}` ES EL CORREO de quien lo intento, pintado en una pantalla publica. Por eso un unico
 # override los cierra los dos: al no usar `{0}`, el correo desaparece solo.
 #
-# NO HACE FALTA UN TEMA DE LOGIN PROPIO, que es lo que la issue daba por caro. Una localizacion
-# de realm GANA al i18n del tema (`RL <language> > T <language>`, fijado en las notas de la
-# 22.0); `RealmRepresentation.localizationTexts` existe en el core de la 26.5.1 —getter y setter
-# comprobados en el jar—; y el chart ya declara `message-bundles` entre los recursos gestionados
-# de config-cli en `values.yaml`. O sea: cero cambios en el chart.
+# NO HACE FALTA UN TEMA DE LOGIN PROPIO, que es lo que la issue daba por caro: una localizacion
+# de realm GANA al i18n del tema (`RL <language> > T <language>`, fijado en las notas de la 22.0),
+# y el chart ya declara `message-bundles` entre los recursos gestionados de config-cli.
+#
+# PERO EL CAMPO NO SE LLAMA COMO EN KEYCLOAK, Y EQUIVOCARSE NO DA ERROR. Keycloak expone esto
+# como `localizationTexts` en su `RealmRepresentation` —getter y setter comprobados en el core
+# de la 26.5.1—, y es el nombre que sale en un export. config-cli NO lo mira: su `RealmImport`
+# declara el suyo propio, `messageBundles`, y es el unico que su `MessageBundleImportService`
+# lee para llamar a `createOrUpdateRealmLocalizationTexts`.
+#
+# MEDIDO EL 19/09/2026 EN QA, porque este es el modo de fallo caro: con `localizationTexts` el
+# import corrio en 33 s, termino `Succeeded`, no escribio ni un WARN —ni una linea sobre
+# bundles— y `keycloak.realm_localizations` se quedo con CERO filas. Sale verde y no hace nada.
+# Si alguna vez esto deja de aplicarse, esa tabla es donde se ve; el log no lo va a decir.
 #
 # DOS TRAMPAS antes de tocar esto:
 #   - `message-bundles` esta en `no-delete`, asi que QUITAR una clave de aqui NO la purga de
@@ -89,7 +98,7 @@ defaultLocale: es
 #     una indefinida aborta el import de los DOS realms. Este bloque no lleva ninguna,
 #     y el comentario que lo advierte tampoco puede llevarla: se dispararia a si mismo.
 #     Los `${...}` del propio Keycloak son seguros, que es otro prefijo.
-localizationTexts:
+messageBundles:
   es:
     federatedIdentityUnavailableMessage: >-
       Deal Tracker es solo por invitación. Si alguien te ha invitado,
