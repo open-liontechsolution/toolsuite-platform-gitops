@@ -61,6 +61,40 @@ supportedLocales:
   - es
 defaultLocale: es
 
+# EL TEXTO DEL RECHAZO, QUE ERA FALSO Y DEJABA EL CORREO A LA VISTA (deal-tracker#890,
+# sintomas 3 y 4).
+#
+# El tema base de la 26.5.1 trae esta cadena (extraida del jar dentro del pod):
+#
+#   federatedIdentityUnavailableMessage=El usuario {0} autenticado con el proveedor de
+#   identidad {1} no existe. Pongase en contacto con su administrador.
+#
+# Son DOS SINTOMAS EN UNA SOLA CADENA. «Pongase en contacto con su administrador» es falso
+# aqui: no hay administrador a quien escribir, y lo cierto es que esto es solo por invitacion.
+# Y `{0}` ES EL CORREO de quien lo intento, pintado en una pantalla publica. Por eso un unico
+# override los cierra los dos: al no usar `{0}`, el correo desaparece solo.
+#
+# NO HACE FALTA UN TEMA DE LOGIN PROPIO, que es lo que la issue daba por caro. Una localizacion
+# de realm GANA al i18n del tema (`RL <language> > T <language>`, fijado en las notas de la
+# 22.0); `RealmRepresentation.localizationTexts` existe en el core de la 26.5.1 —getter y setter
+# comprobados en el jar—; y el chart ya declara `message-bundles` entre los recursos gestionados
+# de config-cli en `values.yaml`. O sea: cero cambios en el chart.
+#
+# DOS TRAMPAS antes de tocar esto:
+#   - `message-bundles` esta en `no-delete`, asi que QUITAR una clave de aqui NO la purga de
+#     Keycloak: solo se reconcilian altas y cambios. Para borrarla de verdad habria que pasar
+#     ese recurso a `full`, y eso afecta a todos los bundles.
+#   - `IMPORT_VARSUBSTITUTION_ENABLED` resuelve cualquier apertura de variable del
+#     fichero —un `$` pegado a un parentesis, tambien dentro de un comentario— y
+#     una indefinida aborta el import de los DOS realms. Este bloque no lleva ninguna,
+#     y el comentario que lo advierte tampoco puede llevarla: se dispararia a si mismo.
+#     Los `${...}` del propio Keycloak son seguros, que es otro prefijo.
+localizationTexts:
+  es:
+    federatedIdentityUnavailableMessage: >-
+      Deal Tracker es solo por invitación. Si alguien te ha invitado,
+      abre el enlace que te llegó por correo.
+
 loginWithEmailAllowed: true
 duplicateEmailsAllowed: false
 editUsernameAllowed: false
