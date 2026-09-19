@@ -48,13 +48,17 @@ defaultLocale: es
 # administrador» —falso aqui, esto es solo por invitacion— y su `{0}` ES EL CORREO de quien lo
 # intento, asi que un unico override cierra los dos sintomas y no hace falta un tema propio.
 #
+# EL CAMPO ES `messageBundles` Y NO `localizationTexts`: el segundo es el nombre de Keycloak, el
+# que sale en un export, y config-cli lo ignora EN SILENCIO —import verde, cero filas en
+# `keycloak.realm_localizations`—. Medido aqui el 19/09/2026. Detalle en el realm de produccion.
+#
 # EL TEXTO LLEVA EL ENTORNO, por la misma razon que el `displayName` de arriba: una pantalla
 # identica a la de produccion es una forma barata de equivocarse.
 #
 # Y ESTE REALM ES DONDE SE MIDE PRIMERO: la rama negativa de deal-tracker#879 se ejerce aqui, y
 # es lo unico que pinta esta pantalla de verdad. Si tras el import `realm_localizations` se
 # quedara vacia, seria que config-cli no aplica el campo — y solo entonces haria falta el tema.
-localizationTexts:
+messageBundles:
   es:
     federatedIdentityUnavailableMessage: >-
       Deal Tracker (QA) es solo por invitación. Si alguien te ha invitado,
