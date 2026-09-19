@@ -34,6 +34,33 @@ realm: deal-tracker-prod
 enabled: true
 sslRequired: external
 
+# LO QUE LA PERSONA LEE CUANDO KEYCLOAK LE HABLA (deal-tracker#890).
+#
+# Sin `displayName`, `RealmBean` cae al NOMBRE del realm, y entonces las pantallas de Keycloak
+# —login, error, recuperacion de contrasena— se titulan `deal-tracker-prod`: el identificador
+# interno presentado como si fuera el nombre del producto. Medido contra el realm gemelo el
+# 19/09/2026: `<title>Sign in to deal-tracker-dev</title>` y la marca de la cabecera con ese
+# mismo texto. Basta este campo, porque `getDisplayNameHtml()` cae a `getDisplayName()` cuando
+# el HTML no esta: una linea arregla el titulo, la marca y el `${realmName}` de los correos.
+displayName: Deal Tracker
+
+# EL IDIOMA, que estaba apagado del todo (deal-tracker#890).
+#
+# El producto esta entero en espanol y sus pantallas de autenticacion salian en ingles. No era
+# una traduccion que faltara: `internationalizationEnabled` estaba en `false`, asi que Keycloak
+# ni miraba su propio bundle. `messages_es.properties` viene en la imagen (26.5.1, comprobado
+# dentro del pod) y cubre lo que vemos, incluido el rechazo federado y el enlace de vuelta.
+#
+# UN SOLO IDIOMA A PROPOSITO: el selector de idioma del login solo aparece con mas de uno en
+# `supportedLocales`, asi que dejando solo `es` la pagina no gana ningun control nuevo.
+#
+# Y OJO A LO QUE ARRASTRA: esto tambien traduce los correos que manda Keycloak (recuperacion de
+# contrasena, verificacion). Es lo que se quiere, pero cambia para quien ya los recibio en ingles.
+internationalizationEnabled: true
+supportedLocales:
+  - es
+defaultLocale: es
+
 loginWithEmailAllowed: true
 duplicateEmailsAllowed: false
 editUsernameAllowed: false
@@ -124,6 +151,14 @@ clients:
     serviceAccountsEnabled: false
     frontchannelLogout: true
     fullScopeAllowed: true
+
+    # LA SALIDA DE LAS PANTALLAS DE ERROR (deal-tracker#890). Esto no es decorativo: el
+    # `error.ftl` del tema base pinta el enlace «Volver a la aplicacion» SOLO dentro de
+    # `<#if client?? && client.baseUrl?has_content>`. Con este campo vacio, quien cae en una
+    # pantalla de error de Keycloak —por ejemplo una cuenta de Google sin invitacion— se queda
+    # sin una sola forma de volver a dealtracker. Va suelto y sin `rootUrl` a proposito: los
+    # `redirectUris` de arriba son absolutos, asi que no dependen de el y su validacion no cambia.
+    baseUrl: https://dealtracker.liontechsolution.com/
 
     redirectUris:
       - https://dealtracker.liontechsolution.com/*

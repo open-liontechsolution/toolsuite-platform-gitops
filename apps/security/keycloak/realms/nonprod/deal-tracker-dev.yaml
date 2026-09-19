@@ -25,6 +25,24 @@ realm: deal-tracker-dev
 enabled: true
 sslRequired: external
 
+# LO QUE LA PERSONA LEE CUANDO KEYCLOAK LE HABLA (deal-tracker#890). El razonamiento completo
+# esta en el realm de produccion; aqui el texto lleva ademas el entorno, porque este realm sirve
+# a QA y una pantalla de login identica a la de produccion es una forma barata de equivocarse.
+# Medido en este mismo realm el 19/09/2026, antes del cambio: `<title>Sign in to
+# deal-tracker-dev</title>` y la marca de la cabecera con ese identificador interno.
+displayName: Deal Tracker (QA)
+
+# EL IDIOMA (deal-tracker#890). Estaba apagado del todo, asi que las pantallas salian en ingles
+# aunque Keycloak trae el bundle `es` en la imagen. Un solo idioma a proposito: el selector solo
+# aparece con mas de uno en `supportedLocales`.
+#
+# ESTE REALM ES DONDE SE EJERCE ANTES DE PRODUCCION: la validacion de QA recorre estas mismas
+# pantallas, incluida la rama negativa del alta con Google (deal-tracker#879).
+internationalizationEnabled: true
+supportedLocales:
+  - es
+defaultLocale: es
+
 loginWithEmailAllowed: true
 duplicateEmailsAllowed: false
 editUsernameAllowed: false
@@ -101,6 +119,11 @@ clients:
     serviceAccountsEnabled: false
     frontchannelLogout: true
     fullScopeAllowed: true
+
+    # LA SALIDA DE LAS PANTALLAS DE ERROR (deal-tracker#890): el `error.ftl` del tema base solo
+    # pinta «Volver a la aplicacion» dentro de `<#if client?? && client.baseUrl?has_content>`.
+    # Apunta a QA, como el resto de este client. Sin `rootUrl`: las redirect URIs son absolutas.
+    baseUrl: https://dealtracker-qa.liontechsolution.com/
 
     redirectUris:
       - https://dealtracker-qa.liontechsolution.com/*
