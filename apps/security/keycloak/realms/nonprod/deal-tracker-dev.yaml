@@ -43,6 +43,23 @@ supportedLocales:
   - es
 defaultLocale: es
 
+# EL TEXTO DEL RECHAZO (deal-tracker#890, sintomas 3 y 4). El razonamiento completo esta en el
+# realm de produccion. En corto: el mensaje del tema base dice «Pongase en contacto con su
+# administrador» —falso aqui, esto es solo por invitacion— y su `{0}` ES EL CORREO de quien lo
+# intento, asi que un unico override cierra los dos sintomas y no hace falta un tema propio.
+#
+# EL TEXTO LLEVA EL ENTORNO, por la misma razon que el `displayName` de arriba: una pantalla
+# identica a la de produccion es una forma barata de equivocarse.
+#
+# Y ESTE REALM ES DONDE SE MIDE PRIMERO: la rama negativa de deal-tracker#879 se ejerce aqui, y
+# es lo unico que pinta esta pantalla de verdad. Si tras el import `realm_localizations` se
+# quedara vacia, seria que config-cli no aplica el campo — y solo entonces haria falta el tema.
+localizationTexts:
+  es:
+    federatedIdentityUnavailableMessage: >-
+      Deal Tracker (QA) es solo por invitación. Si alguien te ha invitado,
+      abre el enlace que te llegó por correo.
+
 loginWithEmailAllowed: true
 duplicateEmailsAllowed: false
 editUsernameAllowed: false
